@@ -1,0 +1,69 @@
+ARQUIVO=C:\Users\User\Desktop\Daisy_repo\Planilha_Comprovantes_VBA.xlsm
+COPIA_TESTE=C:\Users\User\Desktop\Daisy_repo\_auditoria_trabalho.xlsm
+SHEETS
+- Despesas index=1 protected=Verdadeiro used=A1:U59 shapes=0 scrollarea=
+- Controle index=2 protected=Verdadeiro used=A1:I151 shapes=0 scrollarea=
+- Resumo e Rateio index=3 protected=Verdadeiro used=A1:Z14 shapes=0 scrollarea=
+- Config index=4 protected=Verdadeiro used=A1:Z7 shapes=0 scrollarea=
+- Import index=5 protected=Verdadeiro used=A1:H34 shapes=14 scrollarea=
+- Fila index=6 protected=Verdadeiro used=A1:N154 shapes=0 scrollarea=
+- Editar index=7 protected=Verdadeiro used=A1:E24 shapes=2 scrollarea=
+
+MODULOS
+- EstaPasta_de_trabalho tipo=100
+- Plan1 tipo=100
+- Plan2 tipo=100
+- Plan3 tipo=100
+- Plan4 tipo=100
+- Plan5 tipo=100
+- Plan6 tipo=100
+- Plan7 tipo=100
+- ModuloComprovantes tipo=1
+
+BOTOES
+[Import]
+- Rectangle 1 text= macro= left=48 top=76 width=492 height=1,5
+- TextBox 2 text=Preparar macro= left=48 top=104 width=220 height=18
+- Rounded Rectangle 3 text=Ferramenta macro=_auditoria_trabalho.xlsm!AbrirFerramentaExtracao left=48 top=132 width=156 height=30
+- Rounded Rectangle 13 text=Extrair macro=_auditoria_trabalho.xlsm!ExtrairDados left=216 top=132 width=156 height=30
+- Rounded Rectangle 14 text=Carregar JSON macro=_auditoria_trabalho.xlsm!CarregarFilaJson left=384 top=132 width=156 height=30
+- TextBox 15 text=Importar macro= left=48 top=196 width=220 height=18
+- Rounded Rectangle 16 text=Importar pendentes macro=_auditoria_trabalho.xlsm!ImportarTodosPendentes left=48 top=224 width=240 height=32
+- Rounded Rectangle 17 text=Importar linha macro=_auditoria_trabalho.xlsm!ImportarSelecionadoDaFila left=300 top=224 width=240 height=32
+- TextBox 18 text=Manutencao macro= left=48 top=290 width=220 height=18
+- Rounded Rectangle 19 text=Editar registro macro=_auditoria_trabalho.xlsm!AbrirFormularioEdicao left=48 top=318 width=156 height=30
+- Rounded Rectangle 20 text=Abrir arquivo macro=_auditoria_trabalho.xlsm!AbrirComprovante left=216 top=318 width=156 height=30
+- Rounded Rectangle 25 text=Limpar dados macro=_auditoria_trabalho.xlsm!LimparDados left=384 top=318 width=156 height=30
+- Rounded Rectangle 26 text=Destravar edicao macro=_auditoria_trabalho.xlsm!DesbloquearEdicao left=48 top=370 width=156 height=26
+- Rounded Rectangle 27 text=Travar edicao macro=_auditoria_trabalho.xlsm!BloquearEdicao left=216 top=370 width=156 height=26
+[Editar]
+- Rounded Rectangle 1 text=Carregar macro=_auditoria_trabalho.xlsm!CarregarRegistroEdicao left=58 top=396 width=122 height=28
+- Rounded Rectangle 2 text=Salvar macro=_auditoria_trabalho.xlsm!SalvarFormularioEdicao left=192 top=396 width=122 height=28
+
+CABECALHOS
+Despesas: [1:r1=PLANILHA ESTRATÉGICA DE DESPESAS DO ADOLESCENTE/r3=] 
+Controle: [1:r1=CONTROLE DE DOCUMENTOS E COMPROVANTES/r3=Nº] [2:r1=/r3=Categoria] [3:r1=/r3=Documento / comprovante] [4:r1=/r3=Competência] [5:r1=/r3=Valor (R$)] [6:r1=/r3=Situação] [7:r1=/r3=Arquivo / Link] [8:r1=/r3=Observação estratégica] [9:r1=/r3=Hash] 
+Resumo e Rateio: [1:r1=RESUMO ESTRATÉGICO — NECESSIDADE, POSSIBILIDADE E PROPORCIONALIDADE/r3=Categoria] [2:r1=/r3=Total mensal (R$)] [4:r1=/r3=CAPACIDADE CONTRIBUTIVA E RATEIO] 
+Config: [1:r1=CONFIGURAÇÕES/r3=Renda líquida mensal (R$)] [2:r1=/r3=0] [3:r1=/r3=0] 
+Import: [2:r1=/r3=Extracao, fila e revisao] 
+Fila: 
+Editar: 
+
+CONTAGEM_ANTES
+Controle A4:A500=0
+Controle I4:I500=0
+Fila A2:A500=0
+Fila status pendentes/importado/erro/duplicado:
+pendente=0 importado=0 erro=0 duplicado=0
+
+TESTE_MACROS
+Desproteger err=0 
+LimparDados err=0 
+Depois Limpar Controle A4:A500=0
+Depois Limpar Controle I4:I500=0
+CarregarFilaJson err=0 
+Depois Carregar Fila A2:A500=153
+ImportarTodosPendentes err=0 
+Depois Importar Controle A4:A500=148
+Depois Importar Controle I4:I500=148
+Fila final pendente=0 importado=148 erro=1 duplicado=4

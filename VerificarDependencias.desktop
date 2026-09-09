@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Verificar Dependências Daisy
+Comment=Verifica e instala as dependências do projeto Daisy (OCR, PDF, bibliotecas)
+Exec=./verificar_deps.sh
+Path=.
+Terminal=true
+Icon=./_assets/verificar.png
+Categories=Utility;

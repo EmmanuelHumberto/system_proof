@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Extrair Comprovantes
+Comment=Extração de comprovantes de pensão alimentícia (OCR + classificação)
+Exec=./extrair_gui.sh
+Path=.
+Terminal=false
+Icon=./_assets/extrair.png
+Categories=Office;Utility;

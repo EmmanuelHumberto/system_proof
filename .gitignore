@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+*.log
+~$*
+*.tmp
+*.bak
+*_backup_*.xlsm
+*_backup_*.xlsx
+.DS_Store
+.venv/
+venv/
+
+# Dados pessoais e comprovantes reais: manter fora do Git.
+comprovantes/**
+!comprovantes/.gitkeep
+_extraidos/**
+!_extraidos/.gitkeep
+
+# Saidas geradas pela extracao/importacao.
+comprovantes.json
+comprovantes.csv
+**/dados_extraidos.json
+**/resumo_extraidos.xlsx
+
+# Artefatos opcionais gerados localmente.
+Comprovantes_Daisy.xlsx
