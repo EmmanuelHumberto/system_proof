@@ -221,7 +221,7 @@ Sub MontarEditar(wb)
     ws.Range("D4").Font.Bold = True
     ws.Range("D10").NumberFormat = "dd/mm/yyyy"
     ws.Range("D11").NumberFormat = "yyyy-mm"
-    ws.Range("D12").NumberFormat = "R$ #,##0.00"
+    ws.Range("D12").NumberFormat = """R$"" #,##0.00"
 
     AddButton ws, 58, 396, 122, 28, "Carregar", macroPrefix & "CarregarRegistroEdicao", RGB(14, 116, 144), RGB(255, 255, 255)
     AddButton ws, 192, 396, 122, 28, "Salvar", macroPrefix & "SalvarFormularioEdicao", RGB(22, 101, 52), RGB(255, 255, 255)
@@ -253,20 +253,20 @@ Sub FormatarTudo(wb)
     Set ws = wb.Worksheets("Despesas")
     colMedia = HeaderCol(ws, 4, "Media mensal")
     If colMedia = 0 Then colMedia = HeaderCol(ws, 4, "Média mensal")
-    ws.Range("C5:N122").NumberFormatLocal = "R$ #.##0,00"
-    If colMedia > 0 Then ws.Range(ws.Cells(5, 3), ws.Cells(122, colMedia)).NumberFormatLocal = "R$ #.##0,00"
+    ws.Range("C5:N122").NumberFormat = """R$"" #,##0.00"
+    If colMedia > 0 Then ws.Range(ws.Cells(5, 3), ws.Cells(122, colMedia)).NumberFormat = """R$"" #,##0.00"
     ws.Range("O5:O120").NumberFormat = "General"
 
     Set ws = wb.Worksheets("Controle")
     ws.Columns(1).NumberFormat = "0"
     ws.Columns(4).NumberFormat = "yyyy-mm"
-    ws.Columns(5).NumberFormatLocal = "R$ #.##0,00"
+    ws.Columns(5).NumberFormat = """R$"" #,##0.00"
 
     Set ws = wb.Worksheets("Fila")
     ws.Columns(1).NumberFormat = "0"
     ws.Columns(5).NumberFormat = "dd/mm/yyyy"
     ws.Columns(6).NumberFormat = "yyyy-mm"
-    ws.Columns(7).NumberFormatLocal = "R$ #.##0,00"
+    ws.Columns(7).NumberFormat = """R$"" #,##0.00"
 End Sub
 
 Function HeaderCol(ws, rowNum, prefix)

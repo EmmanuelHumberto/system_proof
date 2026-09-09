@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from classificacao import classificar_despesa  # noqa: E402
 from config import BASE, COMPROVANTES_DIR, CONFIG  # noqa: E402
-from indices_categoria import normalizar_resultado  # noqa: E402
+from indices_categoria import normalizar_resultado, pasta_categoria  # noqa: E402
 
 
 def md5_arquivo(rel):
@@ -38,7 +38,7 @@ def main():
     itens_json = []
     ident = 0
     for cat, cfg in CONFIG.items():
-        sub = os.path.join(COMPROVANTES_DIR, cfg["pasta_top"], cfg["sub"])
+        sub = pasta_categoria(cat)
         jp = os.path.join(sub, "dados_extraidos.json")
         if not os.path.exists(jp):
             continue

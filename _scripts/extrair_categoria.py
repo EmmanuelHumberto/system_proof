@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Extrai dados dos comprovantes de uma categoria e gera, DENTRO da pasta:
@@ -21,7 +21,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 
 from config import BASE, COMPROVANTES_DIR, CONFIG, DADOS  # noqa: E402
-from indices_categoria import listar_comprovantes, rel_base, salvar_indice_categoria  # noqa: E402
+from indices_categoria import listar_comprovantes, pasta_categoria, rel_base, salvar_indice_categoria  # noqa: E402
 
 MESES = {
     "JAN": 1, "FEV": 2, "MAR": 3, "ABR": 4, "MAI": 5, "JUN": 6,
@@ -724,7 +724,7 @@ def item_vazio(caminho, cat, cfg):
 def main():
     cat = sys.argv[1] if len(sys.argv) > 1 else "Alimentação"
     cfg = CONFIG[cat]
-    sub = os.path.join(COMPROVANTES_DIR, cfg["pasta_top"], cfg["sub"])
+    sub = pasta_categoria(cat)
     extractor = EXTRACTORS[cat]
 
     with open(DADOS, encoding="utf-8") as fh:
@@ -756,7 +756,7 @@ def main():
 
     meta = {
         "categoria": cat,
-        "pasta": os.path.join(cfg["pasta_top"], cfg["sub"]),
+        "pasta": rel_base(sub),
         "total_comprovantes": len(resultados),
         "extraido_em": datetime.datetime.now().isoformat(),
     }

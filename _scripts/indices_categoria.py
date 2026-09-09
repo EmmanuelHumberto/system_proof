@@ -4,6 +4,8 @@
 import datetime
 import hashlib
 import os
+import re
+import unicodedata
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -15,9 +17,34 @@ from config import BASE, CONFIG, COMPROVANTES_DIR
 COMPROVANTE_EXTS = {".png", ".jpg", ".jpeg", ".pdf"}
 
 
+def normalizar_nome_pasta(valor):
+    texto = unicodedata.normalize("NFKD", valor or "")
+    texto = "".join(ch for ch in texto if not unicodedata.combining(ch))
+    texto = re.sub(r"[^a-z0-9]+", "", texto.lower())
+    return texto
+
+
 def pasta_categoria(categoria):
+    """Resolve a pasta real da categoria, mesmo se o ZIP/pasta foi recriado."""
     cfg = CONFIG[categoria]
-    return os.path.join(COMPROVANTES_DIR, cfg["pasta_top"], cfg["sub"])
+    configurada = os.path.join(COMPROVANTES_DIR, cfg["pasta_top"], cfg["sub"])
+    if os.path.isdir(configurada):
+        return configurada
+
+    alvo = normalizar_nome_pasta(categoria)
+    candidatas = []
+    if os.path.isdir(COMPROVANTES_DIR):
+        for raiz, dirs, _files in os.walk(COMPROVANTES_DIR):
+            for nome in dirs:
+                caminho = os.path.join(raiz, nome)
+                if normalizar_nome_pasta(nome) == alvo:
+                    candidatas.append(caminho)
+
+    if candidatas:
+        candidatas.sort(key=lambda p: (len(os.path.relpath(p, COMPROVANTES_DIR).split(os.sep)), p))
+        return candidatas[0]
+
+    return configurada
 
 
 def rel_base(caminho):
@@ -75,6 +102,7 @@ def normalizar_resultado(resultado, categoria, caminho_abs=None):
 
 
 def salvar_indice_categoria(pasta, categoria, resultados):
+    os.makedirs(pasta, exist_ok=True)
     normalizados = []
     for r in resultados:
         caminho = r.get("caminho") or os.path.join(pasta, r.get("arquivo", ""))
@@ -89,9 +117,13 @@ def salvar_indice_categoria(pasta, categoria, resultados):
     }
 
     json_path = os.path.join(pasta, "dados_extraidos.json")
+    tmp_json_path = json_path + ".tmp"
     import json
-    with open(json_path, "w", encoding="utf-8") as fh:
+    with open(tmp_json_path, "w", encoding="utf-8") as fh:
         json.dump({**meta, "comprovantes": normalizados}, fh, ensure_ascii=False, indent=2)
+    os.replace(tmp_json_path, json_path)
+    if not os.path.exists(json_path):
+        raise RuntimeError(f"Falha ao criar JSON da categoria: {json_path}")
 
     xlsx_path = os.path.join(pasta, "resumo_extraidos.xlsx")
     wb = Workbook()

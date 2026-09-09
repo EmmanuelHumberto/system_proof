@@ -94,8 +94,8 @@ Sub ReorganizarDespesas(ws)
 
     ws.Range("A4:V4").Font.Bold = True
     ws.Range("A4:V4").HorizontalAlignment = xlCenter
-    ws.Range("C5:T59").NumberFormatLocal = "R$ #.##0,00"
-    ws.Range("S5:T59").NumberFormatLocal = "R$ #.##0,00"
+    ws.Range("C5:T59").NumberFormat = """R$"" #,##0.00"
+    ws.Range("S5:T59").NumberFormat = """R$"" #,##0.00"
     ws.Range("R5:R57").HorizontalAlignment = xlCenter
     ws.Range("R5:R57").Font.Size = 12
     ws.Columns("A:U").AutoFit

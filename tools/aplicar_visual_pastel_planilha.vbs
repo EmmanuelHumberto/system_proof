@@ -126,14 +126,15 @@ End Sub
 Sub FormatarDespesas()
     Dim r, fill, lastCol
     Set ws = wb.Worksheets("Despesas")
-    lastCol = 22
+    lastCol = 23
     ws.Cells.EntireColumn.Hidden = False
-    ws.Range("A1:V220").Interior.Color = RGB(226, 232, 240)
-    ws.Range("A1:V220").Font.Color = RGB(15, 23, 42)
-    ws.Range("A1:V220").Borders.LineStyle = xlNone
-    ws.Columns("W:XFD").Hidden = True
+    ws.Cells.EntireRow.Hidden = False
+    ws.Range("A1:W221").Interior.Color = RGB(226, 232, 240)
+    ws.Range("A1:W221").Font.Color = RGB(15, 23, 42)
+    ws.Range("A1:W221").Borders.LineStyle = xlNone
+    ws.Columns("X:XFD").Hidden = True
     ws.ScrollArea = ""
-    Cabecalho ws.Range("A4:V4")
+    Cabecalho ws.Range("A4:W4")
     For r = 5 To 120
         If Trim(CStr(ws.Cells(r, 1).Value)) <> "" Or Trim(CStr(ws.Cells(r, 2).Value)) <> "" Then
             fill = CorCategoria(ws.Cells(r, 1).Value)
@@ -147,21 +148,53 @@ Sub FormatarDespesas()
         If Trim(CStr(ws.Cells(r, 22).Value)) <> "" Then AplicarLink ws.Cells(r, 22), fill
     Next
     AplicarStatusComprovante ws.Range("U5:U120")
-    ws.Range("A4:V122").Borders.LineStyle = xlNone
+    ws.Range("A4:W123").Borders.LineStyle = xlNone
     AplicarBordasDespesas ws, lastCol
-    ws.Range("C5:Q122").NumberFormatLocal = "R$ #.##0,00"
-    ws.Range("S5:T122").NumberFormatLocal = "R$ #.##0,00"
+    ws.Range("C5:Q123").NumberFormat = """R$"" #,##0.00"
+    ws.Range("S5:T123").NumberFormat = """R$"" #,##0.00"
     ws.Range("R5:R120").HorizontalAlignment = xlCenter
-    ws.Range("A122:V122").Interior.Color = RGB(148, 163, 184)
-    ws.Range("A122:V122").Font.Color = RGB(15, 23, 42)
-    ws.Range("A122:V122").Font.Bold = True
-    ws.Columns("A:V").AutoFit
+    ws.Range("A122:W122").Interior.Color = RGB(148, 163, 184)
+    ws.Range("A122:W122").Font.Color = RGB(15, 23, 42)
+    ws.Range("A122:W122").Font.Bold = True
+    ws.Columns("A:W").AutoFit
+    ws.Columns("V").ColumnWidth = 58
+    ws.Columns("W").ColumnWidth = 28
+    ws.Range("V5:W123").WrapText = False
+    ws.Range("V5:W123").ShrinkToFit = False
+    ws.Range("V5:W123").HorizontalAlignment = xlLeft
+    AtualizarVisibilidadeDespesas ws
     ws.Tab.Color = RGB(96, 165, 250)
 End Sub
 
+
+Sub AtualizarVisibilidadeDespesas(ws)
+    Dim r, c, temCadastro, temValor, v
+    On Error Resume Next
+    For r = 5 To 120
+        temCadastro = (Trim(CStr(ws.Cells(r, 1).Value)) <> "" Or Trim(CStr(ws.Cells(r, 2).Value)) <> "")
+        temValor = False
+        If temCadastro Then
+            For c = 3 To 15
+                If IsNumeric(ws.Cells(r, c).Value) Then
+                    v = CDbl(ws.Cells(r, c).Value)
+                    If Abs(v) > 0.000001 Then
+                        temValor = True
+                        Exit For
+                    End If
+                End If
+            Next
+            ws.Rows(r).Hidden = Not temValor
+        Else
+            ws.Rows(r).Hidden = True
+        End If
+    Next
+    ws.Rows(4).Hidden = False
+    ws.Rows(122).Hidden = False
+    On Error GoTo 0
+End Sub
 Sub AplicarBordasDespesas(ws, lastCol)
     Dim rngDados, rngCab
-    Set rngDados = ws.Range(ws.Cells(5, 1), ws.Cells(122, lastCol))
+    Set rngDados = ws.Range(ws.Cells(5, 1), ws.Cells(123, lastCol))
     rngDados.Borders.LineStyle = xlNone
     With rngDados.Borders(xlInsideHorizontal)
         .LineStyle = xlContinuous
@@ -169,7 +202,7 @@ Sub AplicarBordasDespesas(ws, lastCol)
         .Color = RGB(255, 255, 255)
     End With
 
-    Set rngCab = ws.Range(ws.Cells(4, 1), ws.Cells(4, 22))
+    Set rngCab = ws.Range(ws.Cells(4, 1), ws.Cells(4, 23))
     With rngCab.Borders
         .LineStyle = xlContinuous
         .Weight = xlThin
@@ -193,8 +226,8 @@ End Sub
 Sub CongelarReferenciasDespesas()
     wb.Worksheets("Despesas").Activate
     wb.Worksheets("Despesas").ScrollArea = ""
-    wb.Worksheets("Despesas").Columns("V").Hidden = False
-    wb.Worksheets("Despesas").Columns("W:XFD").Hidden = True
+    wb.Worksheets("Despesas").Columns("V:W").Hidden = False
+    wb.Worksheets("Despesas").Columns("X:XFD").Hidden = True
     wb.Worksheets("Despesas").Range("C5").Select
     With xl.ActiveWindow
         .FreezePanes = False
@@ -245,13 +278,14 @@ Sub FormatarControle()
     If lastRow < headerRow Then lastRow = headerRow
     lastCol = UltimaColunaNaLinha(ws, headerRow)
     If lastCol < 9 Then lastCol = 9
-    If lastCol > 26 Then lastCol = 26
+    If lastCol > 27 Then lastCol = 27
 
-    ws.Range(ws.Cells(1, 1), ws.Cells(lastRow + 5, lastCol)).Interior.Color = RGB(226, 232, 240)
-    ws.Range(ws.Cells(1, 1), ws.Cells(lastRow + 5, lastCol)).Font.Color = RGB(15, 23, 42)
-    ws.Range(ws.Cells(1, 1), ws.Cells(lastRow + 5, lastCol)).Borders.LineStyle = xlNone
+    ws.Range(ws.Cells(1, 1), ws.Cells(lastRow + 6, lastCol)).Interior.Color = RGB(226, 232, 240)
+    ws.Range(ws.Cells(1, 1), ws.Cells(lastRow + 6, lastCol)).Font.Color = RGB(15, 23, 42)
+    ws.Range(ws.Cells(1, 1), ws.Cells(lastRow + 6, lastCol)).Borders.LineStyle = xlNone
 
     Cabecalho ws.Range(ws.Cells(headerRow, 1), ws.Cells(headerRow, lastCol))
+    ws.Columns(5).NumberFormat = """R$"" #,##0.00"
     Botao ws, "A1:C2", "Excluir selecionado", macroPrefix & "ExcluirRegistroControleSelecionado", RGB(254, 202, 202)
     Botao ws, "D1:E2", "Limpar filtro", macroPrefix & "LimparFiltroControle", RGB(219, 234, 254)
 
@@ -269,8 +303,8 @@ Sub FormatarControle()
         AplicarLink ws.Cells(r, linkCol), fill
     Next
     AtualizarTotalControleVisual ws, lastRow, lastCol
-    ws.Range("J1:AZ220").Interior.Color = RGB(226, 232, 240)
-    ws.Range("J1:AZ220").Borders.LineStyle = xlNone
+    ws.Range("J1:BA221").Interior.Color = RGB(226, 232, 240)
+    ws.Range("J1:BA221").Borders.LineStyle = xlNone
 
     For c = 1 To lastCol
         ws.Columns(c).AutoFit
@@ -320,7 +354,7 @@ Sub AtualizarTotalControleVisual(ws, lastRow, lastCol)
     ws.Range(ws.Cells(linhaTotal, 1), ws.Cells(linhaTotal, lastCol)).Interior.Color = RGB(219, 234, 254)
     ws.Range(ws.Cells(linhaTotal, 1), ws.Cells(linhaTotal, lastCol)).Font.Color = RGB(15, 23, 42)
     ws.Range(ws.Cells(linhaTotal, 1), ws.Cells(linhaTotal, lastCol)).Font.Bold = True
-    ws.Cells(linhaTotal, 5).NumberFormatLocal = "R$ #.##0,00"
+    ws.Cells(linhaTotal, 5).NumberFormat = """R$"" #,##0.00"
 End Sub
 
 Sub FormatarFila()
@@ -382,7 +416,7 @@ Sub FormatarResumo()
     ws.Cells(14, 1).Value = "TOTAL GERAL"
     ws.Cells(14, 2).Formula = "=SUM(B4:B13)"
     ws.Cells(14, 3).Formula = "=SUM(C4:C13)"
-    ws.Range("B4:C14").NumberFormatLocal = "R$ #.##0,00"
+    ws.Range("B4:C14").NumberFormat = """R$"" #,##0.00"
 
     ws.Range("E3:G3").Merge
     ws.Range("E3").Value = "CAPACIDADE CONTRIBUTIVA E RATEIO"
@@ -408,9 +442,9 @@ Sub FormatarResumo()
     ws.Range("G9").Formula = "=$B$14*G8"
     ws.Range("E5:G9").Interior.Color = RGB(245, 243, 255)
     ws.Range("E5:G9").Font.Color = RGB(15, 23, 42)
-    ws.Range("F5:G7").NumberFormatLocal = "R$ #.##0,00"
+    ws.Range("F5:G7").NumberFormat = """R$"" #,##0.00"
     ws.Range("F8:G8").NumberFormatLocal = "0,00%"
-    ws.Range("F9:G9").NumberFormatLocal = "R$ #.##0,00"
+    ws.Range("F9:G9").NumberFormat = """R$"" #,##0.00"
 
     ws.Columns("A").ColumnWidth = 26
     ws.Columns("B:C").ColumnWidth = 18
@@ -456,7 +490,7 @@ Sub FormatarConfig()
     ws.Rows("8:8").RowHeight = 8
 
     ws.Range("A1:F1").Merge
-    ws.Range("A1").Value = "Configurações"
+    ws.Range("A1").Value = "Configuraï¿½ï¿½es"
     ws.Range("A1").Font.Size = 17
     ws.Range("A1").Font.Bold = True
     ws.Range("A1").Font.Color = RGB(30, 58, 95)
@@ -464,29 +498,29 @@ Sub FormatarConfig()
     ws.Range("A2:C2").Interior.Color = RGB(30, 58, 95)
     ws.Range("A2:C2").Font.Color = RGB(255, 255, 255)
     ws.Range("A2:C2").Font.Bold = True
-    ws.Range("A2").Value = "Parâmetro"
+    ws.Range("A2").Value = "Parï¿½metro"
     ws.Range("B2").Value = "Genitor 1"
     ws.Range("C2").Value = "Genitor 2"
-    ws.Range("A3").Value = "Renda líquida mensal (R$)"
-    ws.Range("A4").Value = "Outras obrigações essenciais (R$)"
+    ws.Range("A3").Value = "Renda lï¿½quida mensal (R$)"
+    ws.Range("A4").Value = "Outras obrigaï¿½ï¿½es essenciais (R$)"
     ws.Range("B3").Value = renda1
     ws.Range("C3").Value = renda2
     ws.Range("B4").Value = obrig1
     ws.Range("C4").Value = obrig2
     ws.Range("A3:C4").Interior.Color = RGB(241, 245, 249)
-    ws.Range("B3:C4").NumberFormatLocal = "R$ #.##0,00"
+    ws.Range("B3:C4").NumberFormat = """R$"" #,##0.00"
 
     ws.Range("A6:C6").Interior.Color = RGB(30, 58, 95)
     ws.Range("A6:C6").Font.Color = RGB(255, 255, 255)
     ws.Range("A6:C6").Font.Bold = True
-    ws.Range("A6").Value = "Parâmetro"
+    ws.Range("A6").Value = "Parï¿½metro"
     ws.Range("B6").Value = moradores
     ws.Range("C6").Value = ""
     ws.Range("A7").Value = "Caminho da pasta de comprovantes"
     ws.Range("B7:C7").Merge
     ws.Range("B7").Value = caminho
     ws.Range("A7:C7").Interior.Color = RGB(241, 245, 249)
-    ws.Range("A6").Value = "Nº de moradores (rateio moradia)"
+    ws.Range("A6").Value = "Nï¿½ de moradores (rateio moradia)"
     ws.Range("B6").NumberFormat = "0"
 
     ws.Range("E2:F2").Merge
@@ -699,7 +733,7 @@ Sub RedesenharEditar()
     Campo ws.Range("D8:G18")
     ws.Range("D10").NumberFormat = "dd/mm/yyyy"
     ws.Range("D11").NumberFormat = "yyyy-mm"
-    ws.Range("D12").NumberFormatLocal = "R$ #.##0,00"
+    ws.Range("D12").NumberFormat = """R$"" #,##0.00"
     Botao ws, "B21:C22", "Carregar", macroPrefix & "CarregarRegistroEdicao", RGB(191, 219, 254)
     Botao ws, "D21:E22", "Salvar", macroPrefix & "SalvarFormularioEdicao", RGB(187, 247, 208)
     ws.ScrollArea = "A1:H24"

@@ -335,6 +335,7 @@ Private Function ImportarLinhaFila(wsF As Worksheet, rF As Long) As Boolean
 
     wsD.Cells(rD, COL_COMPROVANTE).Value = "Anexado"
     AtualizarObservacaoComLink wsD, rD, rC - 3, arquivo
+    wsD.Rows(rD).Hidden = False
     wsF.Cells(rF, 2).Value = "importado"
     wsF.Cells(rF, 14).Value = "Controle nº " & (rC - 3)
     ImportarLinhaFila = True
@@ -439,6 +440,7 @@ Public Sub ImportarComprovantesCsv()
             End If
             wsD.Cells(rD, COL_COMPROVANTE).Value = "Anexado"
             AtualizarObservacaoComLink wsD, rD, rC - 3, arquivo
+    wsD.Rows(rD).Hidden = False
             importados = importados + 1
         End If
 ProximaLinha:
@@ -848,22 +850,22 @@ Public Sub AplicarFormatacaoPadrao()
     Set ws = ThisWorkbook.Worksheets("Despesas")
     colTotal = ColunaPorCabecalho(ws, "Total")
     colMedia = ColunaPorCabecalho(ws, "Média mensal")
-    If colMedia > 0 Then ws.Range(ws.Cells(LINHA_INICIAL_DADOS, COL_MES_INICIAL), ws.Cells(LINHA_TOTAL, COL_VALOR_COTA_PARTE)).NumberFormat = "R$ #,##0.00" Else ws.Range("C5:N59").NumberFormat = "R$ #,##0.00"
+    If colMedia > 0 Then ws.Range(ws.Cells(LINHA_INICIAL_DADOS, COL_MES_INICIAL), ws.Cells(LINHA_TOTAL, COL_VALOR_COTA_PARTE)).NumberFormat = """R$"" #,##0.00" Else ws.Range("C5:N59").NumberFormat = """R$"" #,##0.00"
     ws.Range(ws.Cells(LINHA_INICIAL_DADOS, COL_COTA_PARTE), ws.Cells(LINHA_FINAL_DADOS, COL_COTA_PARTE)).NumberFormat = "General"
     Set ws = ThisWorkbook.Worksheets("Controle")
     AtualizarTotalControle ws
     ws.Columns(1).NumberFormat = "0"
     ws.Columns(4).NumberFormat = "yyyy-mm"
-    ws.Columns(5).NumberFormat = "R$ #,##0.00"
+    ws.Columns(5).NumberFormat = """R$"" #,##0.00"
     Set ws = ThisWorkbook.Worksheets("Fila")
     ws.Columns(1).NumberFormat = "0"
     ws.Columns(5).NumberFormat = "dd/mm/yyyy"
     ws.Columns(6).NumberFormat = "yyyy-mm"
-    ws.Columns(7).NumberFormat = "R$ #,##0.00"
+    ws.Columns(7).NumberFormat = """R$"" #,##0.00"
     Set ws = ThisWorkbook.Worksheets(NOME_ABA_FORM)
     ws.Range("D10").NumberFormat = "dd/mm/yyyy"
     ws.Range("D11").NumberFormat = "yyyy-mm"
-    ws.Range("D12").NumberFormat = "R$ #,##0.00"
+    ws.Range("D12").NumberFormat = """R$"" #,##0.00"
     On Error GoTo 0
 End Sub
 
@@ -949,8 +951,13 @@ Public Sub CongelarReferenciasDespesas()
     With ThisWorkbook.Worksheets("Despesas")
         .Activate
         .ScrollArea = ""
-        .Columns("V").Hidden = False
-        .Columns("W:XFD").Hidden = True
+        .Columns("V:W").Hidden = False
+        .Columns("V").ColumnWidth = 58
+        .Columns("W").ColumnWidth = 28
+        .Range("V5:W123").WrapText = False
+        .Range("V5:W123").ShrinkToFit = False
+        .Range("V5:W123").HorizontalAlignment = xlLeft
+        .Columns("X:XFD").Hidden = True
         .Range("C5").Select
     End With
     With ActiveWindow
@@ -1229,7 +1236,7 @@ Private Sub AtualizarTotalControle(ws As Worksheet)
     ws.Cells(linhaTotal, 6).Formula = "=SUBTOTAL(103,A" & LINHA_INICIAL_CONTROLE & ":A" & ultima & ")"
     ws.Range(ws.Cells(linhaTotal, 1), ws.Cells(linhaTotal, COL_HASH_CONTROLE)).Interior.Color = RGB(219, 234, 254)
     ws.Range(ws.Cells(linhaTotal, 1), ws.Cells(linhaTotal, COL_HASH_CONTROLE)).Font.Bold = True
-    ws.Cells(linhaTotal, 5).NumberFormat = "R$ #,##0.00"
+    ws.Cells(linhaTotal, 5).NumberFormat = """R$"" #,##0.00"
 End Sub
 Private Sub GarantirCabecalhoControle(ws As Worksheet)
     ws.Cells(3, COL_HASH_CONTROLE).Value = "Hash"
@@ -1289,6 +1296,34 @@ Private Function AcharOuCriarColunaMes(mes As String) As Long
     AcharOuCriarColunaMes = COL_MES_INICIAL + nMes - 1
 End Function
 
+Private Function LinhaDespesaTemValor(ws As Worksheet, linha As Long) As Boolean
+    Dim c As Long
+    For c = COL_MES_INICIAL To COL_EVENTUAL_ANUAL
+        If Abs(NzD(ws.Cells(linha, c).Value)) > 0.000001 Then
+            LinhaDespesaTemValor = True
+            Exit Function
+        End If
+    Next c
+End Function
+
+Public Sub AtualizarVisibilidadeDespesas(Optional ws As Worksheet)
+    Dim r As Long, temCadastro As Boolean
+    On Error Resume Next
+    If ws Is Nothing Then Set ws = ThisWorkbook.Worksheets("Despesas")
+    If ws Is Nothing Then Exit Sub
+    For r = LINHA_INICIAL_DADOS To LINHA_FINAL_DADOS
+        temCadastro = (Trim(CStr(ws.Cells(r, 1).Value)) <> "" Or Trim(CStr(ws.Cells(r, 2).Value)) <> "")
+        If temCadastro Then
+            ws.Rows(r).Hidden = Not LinhaDespesaTemValor(ws, r)
+        Else
+            ws.Rows(r).Hidden = True
+        End If
+    Next r
+    ws.Rows(LINHA_CABECALHO).Hidden = False
+    ws.Rows(LINHA_TOTAL).Hidden = False
+    On Error GoTo 0
+End Sub
+
 Private Sub AtualizarFormulasDespesas(ws As Worksheet)
     Dim r As Long
     For r = LINHA_INICIAL_DADOS To LINHA_FINAL_DADOS
@@ -1307,6 +1342,7 @@ Private Sub AtualizarFormulasDespesas(ws As Worksheet)
     ws.Cells(LINHA_TOTAL, COL_VALOR_ANUAL).Formula = "=SUM(" & ws.Cells(LINHA_INICIAL_DADOS, COL_VALOR_ANUAL).Address(False, False) & ":" & ws.Cells(LINHA_FINAL_DADOS, COL_VALOR_ANUAL).Address(False, False) & ")"
     ws.Cells(LINHA_TOTAL, COL_VALOR_COTA_PARTE_ANUAL).Formula = "=SUM(" & ws.Cells(LINHA_INICIAL_DADOS, COL_VALOR_COTA_PARTE_ANUAL).Address(False, False) & ":" & ws.Cells(LINHA_FINAL_DADOS, COL_VALOR_COTA_PARTE_ANUAL).Address(False, False) & ")"
     ws.Cells(LINHA_TOTAL, COL_VALOR_COTA_PARTE).Formula = "=SUM(" & ws.Cells(LINHA_INICIAL_DADOS, COL_VALOR_COTA_PARTE).Address(False, False) & ":" & ws.Cells(LINHA_FINAL_DADOS, COL_VALOR_COTA_PARTE).Address(False, False) & ")"
+    AtualizarVisibilidadeDespesas ws
 End Sub
 
 Private Sub AtualizarResumoRateio()
@@ -1323,7 +1359,7 @@ Private Sub AtualizarResumoRateio()
     Next r
     ws.Cells(14, 2).Formula = "=SUM(B4:B13)"
     ws.Cells(14, 3).Formula = "=SUM(C4:C13)"
-    ws.Range("B4:C14").NumberFormat = "R$ #,##0.00"
+    ws.Range("B4:C14").NumberFormat = """R$"" #,##0.00"
     On Error GoTo 0
 End Sub
 Private Function ColunaPorCabecalho(ws As Worksheet, prefixo As String) As Long

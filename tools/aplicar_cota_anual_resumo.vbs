@@ -51,8 +51,8 @@ wsD.Cells(59, 20).Formula = "=SUM(T5:T57)"
 
 wsD.Range("A4:V4").Font.Bold = True
 wsD.Range("A4:V4").HorizontalAlignment = xlCenter
-wsD.Range("C5:Q59").NumberFormatLocal = "R$ #.##0,00"
-wsD.Range("S5:T59").NumberFormatLocal = "R$ #.##0,00"
+wsD.Range("C5:Q59").NumberFormat = """R$"" #,##0.00"
+wsD.Range("S5:T59").NumberFormat = """R$"" #,##0.00"
 wsD.Range("R5:R57").NumberFormat = "General"
 wsD.Columns("A:V").AutoFit
 
@@ -61,7 +61,7 @@ For r = 4 To 13
     wsR.Cells(r, 2).Formula = "=SUMIFS(Despesas!$T:$T,Despesas!$A:$A,A" & r & ")"
 Next
 wsR.Cells(14, 2).Formula = "=SUM(B4:B13)"
-wsR.Range("B4:B14").NumberFormatLocal = "R$ #.##0,00"
+wsR.Range("B4:B14").NumberFormat = """R$"" #,##0.00"
 
 For Each ws In wb.Worksheets
     On Error Resume Next
