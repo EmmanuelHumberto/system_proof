@@ -11,15 +11,21 @@ import os
 import subprocess
 import sys
 
-from config import CONFIG
-from extrair_comprovantes import main as reprocessar_arquivos
+from config import CONFIG, COMPROVANTES_DIR
+from extrair_comprovantes import main as reprocessar_arquivos, listar_arquivos
 from extrair_tudo import main as gerar_json_csv
+from inventario_comprovantes import main as gerar_inventario
 
 
 def main():
+    if not os.path.isdir(COMPROVANTES_DIR) or not listar_arquivos():
+        raise SystemExit("Nenhum comprovante original encontrado. Restaure a pasta comprovantes antes de extrair; os indices existentes foram preservados.")
     base_scripts = os.path.dirname(os.path.abspath(__file__))
     extrator = os.path.join(base_scripts, "extrair_categoria.py")
     categorias = sys.argv[1:] or list(CONFIG.keys())
+
+    print("Inventariando arquivos fisicos em comprovantes/...")
+    gerar_inventario()
 
     print("Reprocessando arquivos fisicos em comprovantes/...")
     reprocessar_arquivos()

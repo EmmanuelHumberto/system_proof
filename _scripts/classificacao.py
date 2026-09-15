@@ -4,6 +4,11 @@
 
 
 def classificar_despesa(cat, c):
+    from catalogo import resolver_despesa
+    return resolver_despesa(cat, _classificar_padrao(cat, c))
+
+
+def _classificar_padrao(cat, c):
     alvo = (
         c.get("arquivo", "")
         + " "
@@ -75,5 +80,15 @@ def classificar_despesa(cat, c):
         if any(k in alvo for k in ("studio mirra", "adilson", "cabeleireiro", "barbearia")):
             return "Cabeleireiro / cuidados pessoais"
         return "Roupas"
+
+    if cat == "Esporte e desenvolvimento":
+        if any(k in alvo for k in ("academia", "smart fit", "fit", "wellness")):
+            return "Academia e atividades esportivas"
+        if any(k in alvo for k in ("escolinha", "futebol", "judô", "judo", "natação", "natacao", "balé", "bale", "pilates", "caratê", "carate")):
+            return "Escolinha e aula de esportes"
+        return "Outras despesas comprovadas"
+
+    if cat == "Mesada":
+        return "Mesada"
 
     return "Outras despesas comprovadas"

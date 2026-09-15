@@ -26,6 +26,7 @@ from extrair_categoria import EXTRACTORS, CONFIG, BASE  # noqa: E402
 from extrair_ferramenta import extrair_um, extrair_lote  # noqa: E402
 from classificacao import classificar_despesa  # noqa: E402
 from indices_categoria import mesclar_indice_categoria  # noqa: E402
+from catalogo import despesas_ativas, periodicidade as periodicidade_cadastro
 
 try:
     from PIL import Image, ImageTk
@@ -52,6 +53,8 @@ CORES_CATEGORIA = {
     "Transporte": "#cbe8e5",
     "Educação": "#fff0b8",
     "Vestuário e higiene": "#e8d1eb",
+    "Esporte e desenvolvimento": "#d2e8c8",
+    "Mesada": "#fde9c8",
 }
 
 DESPESAS = {
@@ -77,6 +80,10 @@ DESPESAS = {
     "Lazer e convivência": ["Assinaturas de streaming – quota-parte",
                             "Cinema, parques e passeios", "Viagens e férias"],
     "Comunicação e tecnologia": ["Plano de telefonia celular", "Aparelho celular"],
+    "Esporte e desenvolvimento": ["Academia e atividades esportivas",
+                                  "Escolinha e aula de esportes",
+                                  "Outras despesas comprovadas"],
+    "Mesada": ["Mesada"],
 }
 
 
@@ -274,8 +281,7 @@ class App:
 
     def _completar(self, r, cat):
         r["despesa"] = classificar_despesa(cat, r)
-        r["periodicidade"] = "Anual" if any(k in r["despesa"].lower()
-                                             for k in ("iptu", "enem", "matrícula")) else "Mensal"
+        r["periodicidade"] = periodicidade_cadastro(cat, r["despesa"])
         return r
 
     def _itens_visiveis(self):
@@ -305,7 +311,7 @@ class App:
         self.var_tipo.set(r.get("tipo") or "")
         self.var_despesa.set(r.get("despesa") or "")
         self.var_periodicidade.set(r.get("periodicidade") or "Mensal")
-        self.cbo_despesa["values"] = DESPESAS.get(r["categoria"], [])
+        self.cbo_despesa["values"] = despesas_ativas(r["categoria"])
         self.mostrar_preview(r.get("caminho"))
 
     def mostrar_preview(self, caminho):
@@ -381,7 +387,7 @@ class App:
             self.resultados = normalizados
         try:
             self.salvar_fila_selecionada()
-            self.var_status.set("Salvo. fila JSON/CSV gerada somente com a selecao atual.")
+            self.var_status.set("Salvo. fila JSON/CSV consolidada a partir de todas as pastas.")
         except Exception as e:
             self.var_status.set("Falha ao gerar fila selecionada: " + str(e))
             messagebox.showerror("Erro ao salvar", str(e))
@@ -389,47 +395,10 @@ class App:
         messagebox.showinfo("Concluido", "Dados salvos.")
 
     def salvar_fila_selecionada(self):
-        itens = []
-        for ident, r in enumerate(self.resultados, 1):
-            caminho = r.get("caminho") or r.get("arquivo") or ""
-            arquivo_rel = self._relativo_base(caminho)
-            data = r.get("data") or ""
-            mes = data[:7] if data else ""
-            item = {
-                "id": ident,
-                "status": "pendente",
-                "categoria": r.get("categoria") or self.var_categoria.get(),
-                "despesa": r.get("despesa") or classificar_despesa(self.var_categoria.get(), r),
-                "data": data,
-                "mes": mes,
-                "valor": r.get("valor"),
-                "pagador": r.get("pagador") or "",
-                "recebedor": r.get("recebedor") or "",
-                "tipo": r.get("tipo") or "",
-                "arquivo": arquivo_rel,
-                "hash": self._hash_arquivo(caminho),
-                "periodicidade": r.get("periodicidade") or "Mensal",
-            }
-            itens.append(item)
-
-        payload = {
-            "meta": {
-                "gerado_em": datetime.datetime.now().isoformat(timespec="seconds"),
-                "base": BASE,
-                "total_comprovantes": len(itens),
-                "fonte": "selecao da ferramenta grafica",
-            },
-            "comprovantes": itens,
-        }
-        with open(os.path.join(BASE, "comprovantes.json"), "w", encoding="utf-8") as fh:
-            json.dump(payload, fh, ensure_ascii=False, indent=2)
-
-        campos = ["id", "categoria", "despesa", "data", "mes", "valor", "pagador",
-                  "recebedor", "tipo", "arquivo", "hash", "periodicidade"]
-        with open(os.path.join(BASE, "comprovantes.csv"), "w", encoding="utf-8", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=campos, delimiter=";", extrasaction="ignore")
-            writer.writeheader()
-            writer.writerows(itens)
+        # Uma tela pode editar apenas uma pasta. A fila do Excel deve refletir
+        # todas as pastas indexadas, nunca apenas a selecao que esta aberta.
+        from extrair_tudo import main as gerar_fila_consolidada
+        gerar_fila_consolidada()
 
     def _relativo_base(self, caminho):
         if not caminho:

@@ -187,12 +187,16 @@ def parse_datas(texto):
             y += 2000
         datas.append(("dd/mm", int(d), int(mo), y))
     for m in re.finditer(
-        r"(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)[.]?\s+(\d{4})",
+        r"(?<![A-Za-z0-9])([0-9Oo]{1,2})\s*(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)[.]?\s+(\d{4})(?!\d)",
         texto, re.IGNORECASE,
     ):
-        d = int(m.group(1))
+        d = int(m.group(1).upper().replace("O", "0"))
         mes = MESES_ABREV[m.group(2).upper()]
         y = int(m.group(3))
+        try:
+            datetime.date(y, mes, d)
+        except ValueError:
+            continue
         datas.append(("dd_mes", d, mes, y))
     for m in re.finditer(
         r"(\d{1,2})\s+de\s+(janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})",

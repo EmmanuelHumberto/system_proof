@@ -64,12 +64,15 @@ def parse_valor(texto):
 def parse_data(texto):
     """Data do comprovante -> ISO (YYYY-MM-DD)."""
     m = re.search(
-        r"(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)[.]?\s+(\d{4})",
+        r"(?<![A-Za-z0-9])([0-9Oo]{1,2})\s*(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)[.]?\s+(\d{4})(?!\d)",
         texto, re.IGNORECASE,
     )
     if m:
-        d, mes, y = int(m.group(1)), MESES[m.group(2).upper()], int(m.group(3))
-        return f"{y:04d}-{mes:02d}-{d:02d}"
+        d, mes, y = int(m.group(1).upper().replace("O", "0")), MESES[m.group(2).upper()], int(m.group(3))
+        try:
+            return datetime.date(y, mes, d).isoformat()
+        except ValueError:
+            return None
     m = re.search(r"(?:EMISS[AÃ]O|emissão)[:\s]*(\d{1,2})/(\d{1,2})/(\d{4})", texto, re.IGNORECASE)
     if m:
         return f"{int(m.group(3)):04d}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
@@ -687,6 +690,85 @@ def extrair_vestuario(it):
     return r
 
 
+def extrair_esporte(it):
+    texto = it["texto_extraido"]
+    t = texto.lower()
+    r = {
+        "arquivo": it["arquivo"],
+        "categoria": "Esporte e desenvolvimento",
+        "tipo": None,
+        "data": parse_data(texto),
+        "valor": parse_valor(texto),
+        "pagador": None,
+        "recebedor": None,
+    }
+    if "compra no débito" in t or "compra no debito" in t:
+        r["tipo"] = "Débito (cartão)"
+        r["recebedor"] = recebedor_debito(texto)
+        m = re.search(
+            r"titular do cart[ãa]o\s*\n\s*Nome\s*([\s\S]*?)(?=\n\s*(?:CPF|N[úu]mero))",
+            texto, re.IGNORECASE,
+        )
+        if m:
+            r["pagador"] = limpar(" ".join(m.group(1).split()))
+    else:
+        r["tipo"] = "Pix (transferência)"
+        m = re.search(
+            r"Origem\s*\n\s*Nome\s*([\s\S]*?)(?=\n\s*(?:Institui|CPF|Banco|Conta|Ag|CNPJ))",
+            texto, re.IGNORECASE,
+        )
+        if m:
+            r["pagador"] = limpar(" ".join(m.group(1).split()))
+        m = re.search(
+            r"Destino\s*\n\s*Nome\s*([\s\S]*?)(?=\n\s*(?:CNPJ|CPF|Institui|Chave|Banco|Tipo))",
+            texto, re.IGNORECASE,
+        )
+        if m:
+            r["recebedor"] = limpar(" ".join(m.group(1).split()))
+    if not r["data"]:
+        r["data"] = data_por_nome_arquivo(r["arquivo"])
+    return r
+
+
+def extrair_mesada(it):
+    texto = it["texto_extraido"]
+    t = texto.lower()
+    r = {
+        "arquivo": it["arquivo"],
+        "categoria": "Mesada",
+        "tipo": None,
+        "data": parse_data(texto),
+        "valor": parse_valor(texto),
+        "pagador": None,
+        "recebedor": None,
+    }
+    if "transferência crédito" in t or "transferencia credito" in t:
+        r["tipo"] = "Pix (crédito recebido)"
+        m = re.search(
+            r"Origem\s*\n\s*Nome\s*([\s\S]*?)(?=\n\s*(?:Institui|CPF|Banco|Conta|Ag|CNPJ))",
+            texto, re.IGNORECASE,
+        )
+        if m:
+            r["pagador"] = limpar(" ".join(m.group(1).split()))
+        m = re.search(
+            r"Destino\s*\n\s*Nome\s*([\s\S]*?)(?=\n\s*(?:CNPJ|CPF|Institui|Chave|Banco|Tipo))",
+            texto, re.IGNORECASE,
+        )
+        if m:
+            r["recebedor"] = limpar(" ".join(m.group(1).split()))
+    else:
+        r["tipo"] = "Pix"
+        m = re.search(
+            r"Origem\s*\n\s*Nome\s*([\s\S]*?)(?=\n\s*(?:Institui|CPF|Banco|Conta|Ag|CNPJ))",
+            texto, re.IGNORECASE,
+        )
+        if m:
+            r["pagador"] = limpar(" ".join(m.group(1).split()))
+    if not r["data"]:
+        r["data"] = data_por_nome_arquivo(r["arquivo"])
+    return r
+
+
 EXTRACTORS = {
     "Alimentação": extrair_alimentacao,
     "Comunicação e tecnologia": extrair_comunicacao,
@@ -696,6 +778,8 @@ EXTRACTORS = {
     "Transporte": extrair_transporte,
     "Educação": extrair_educacao,
     "Vestuário e higiene": extrair_vestuario,
+    "Esporte e desenvolvimento": extrair_esporte,
+    "Mesada": extrair_mesada,
 }
 
 

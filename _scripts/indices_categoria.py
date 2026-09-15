@@ -68,15 +68,15 @@ def listar_comprovantes(pasta):
     itens = []
     if not os.path.isdir(pasta):
         return itens
-    for nome in sorted(os.listdir(pasta)):
-        caminho = os.path.join(pasta, nome)
-        if not os.path.isfile(caminho):
-            continue
-        if nome.startswith(".~lock"):
-            continue
-        if os.path.splitext(nome)[1].lower() not in COMPROVANTE_EXTS:
-            continue
-        itens.append(caminho)
+    for raiz, _pastas, arquivos in os.walk(pasta):
+        for nome in arquivos:
+            caminho = os.path.join(raiz, nome)
+            if nome.startswith(".~lock"):
+                continue
+            if os.path.splitext(nome)[1].lower() not in COMPROVANTE_EXTS:
+                continue
+            itens.append(caminho)
+    itens.sort(key=lambda caminho: os.path.relpath(caminho, pasta).lower())
     return itens
 
 

@@ -14,8 +14,6 @@ Option Explicit
 Private Const LINHA_CABECALHO As Long = 4
 Private Const LINHA_INICIAL_DADOS As Long = 5
 Private Const LINHA_INICIAL_CONTROLE As Long = 4
-Private Const LINHA_FINAL_DADOS As Long = 120
-Private Const LINHA_TOTAL As Long = 122
 Private Const COL_COMPROVANTE As Long = 21
 Private Const COL_OBSERVACOES As Long = 22
 Private Const COL_HASH_CONTROLE As Long = 9
@@ -30,6 +28,36 @@ Private Const COL_VALOR_ANUAL As Long = 17
 Private Const COL_COTA_PARTE As Long = 18
 Private Const COL_VALOR_COTA_PARTE_ANUAL As Long = 19
 Private Const COL_VALOR_COTA_PARTE As Long = 20
+
+Private Function LINHA_FINAL_DADOS() As Long
+    LINHA_FINAL_DADOS = Application.Max(120, ThisWorkbook.Worksheets("Despesas").Cells(Rows.Count, 2).End(xlUp).Row)
+End Function
+
+Private Function LINHA_TOTAL() As Long
+    LINHA_TOTAL = LINHA_FINAL_DADOS + 2
+End Function
+
+Public Sub NovoCadastroDespesa()
+    With ThisWorkbook.Worksheets(NOME_ABA_CADASTROS)
+        .Activate
+        .Range("C4").Value = ""
+        .Range("C6").Value = ""
+        .Range("I4").Value = ""
+        .Range("C8").Value = "Nao"
+        .Range("E8").Value = "Mensal"
+        .Range("G8").Value = "Sim"
+        .Range("C4").Select
+    End With
+End Sub
+
+Public Sub AtualizarCalculos()
+    AtualizarFormulasDespesas ThisWorkbook.Worksheets("Despesas")
+    AtualizarResumoRateio
+    AtualizarTotalControle ThisWorkbook.Worksheets("Controle")
+    AjustarMargensTabelas
+    ModuloIntegridade.AtualizarReferencias
+End Sub
+
 
 Public Function MediaMeses(rng As Range) As Double
     Dim c As Range, soma As Double, n As Long
@@ -139,13 +167,13 @@ Public Sub IrParaDespesas()
     CongelarReferenciasDespesas
 End Sub
 
-Public Sub CarregarFilaJson()
+Public Sub CarregarFilaJson(Optional caminhoJson As String = "")
     NormalizarJanela
-    Dim caminhoJson As String, texto As String, itens As Collection, item As Object
+    Dim texto As String, itens As Collection, item As Object
     Dim ws As Worksheet, wsC As Worksheet, r As Long
     Dim hashItem As String, carregados As Long, jaImportados As Long
 
-    caminhoJson = CaminhoBase() & Application.PathSeparator & "comprovantes.json"
+    If caminhoJson = "" Then caminhoJson = CaminhoBase() & Application.PathSeparator & "comprovantes.json"
     If Dir(caminhoJson) = "" Then
         Aviso "JSON nao encontrado:" & vbLf & caminhoJson, vbExclamation
         Exit Sub
@@ -268,196 +296,103 @@ Public Sub ImportarTodosPendentes()
 End Sub
 
 Private Function ImportarLinhaFila(wsF As Worksheet, rF As Long) As Boolean
-    Dim wsC As Worksheet, wsD As Worksheet
-    Dim rC As Long, rD As Long, colMes As Long, valor As Double
-    Dim cat As String, desp As String, dt As String, mes As String
-    Dim pagador As String, recebedor As String, tipo As String, arquivo As String, hash As String, periodicidade As String
-
+    Dim wsC As Worksheet, wsD As Worksheet, wsR As Worksheet
+    Dim rC As Long, rD As Long, colMes As Long, valor As Double, cadastro As Long, numero As Long
+    Dim cat As String, desp As String, mes As String, hash As String, periodicidade As String, arquivo As String
+    Dim saldo As Variant, registro As Variant, gravando As Boolean, mensagem As String
     On Error GoTo FalhaLinha
     Set wsC = ThisWorkbook.Worksheets("Controle")
     Set wsD = ThisWorkbook.Worksheets("Despesas")
+    Set wsR = ThisWorkbook.Worksheets(NOME_ABA_CADASTROS)
     DesprotegerPlanilhas
-    GarantirCabecalhoControle wsC
-
-    cat = Trim(CStr(wsF.Cells(rF, 3).Value))
-    desp = Trim(CStr(wsF.Cells(rF, 4).Value))
-    dt = Trim(CStr(wsF.Cells(rF, 5).Value))
-    mes = Trim(CStr(wsF.Cells(rF, 6).Value))
-    pagador = Trim(CStr(wsF.Cells(rF, 8).Value))
-    recebedor = Trim(CStr(wsF.Cells(rF, 9).Value))
-    tipo = Trim(CStr(wsF.Cells(rF, 10).Value))
-    arquivo = Trim(CStr(wsF.Cells(rF, 11).Value))
-    hash = Trim(CStr(wsF.Cells(rF, 12).Value))
-    periodicidade = Trim(CStr(wsF.Cells(rF, 13).Value))
-    If periodicidade = "" Then periodicidade = "Mensal"
-
-    If Not TryParseDouble(CStr(wsF.Cells(rF, 7).Value), valor) Then
-        wsF.Cells(rF, 2).Value = "erro"
-        wsF.Cells(rF, 14).Value = "Valor invalido"
-        Exit Function
-    End If
-    If hash <> "" And HashJaImportado(wsC, hash) Then
-        wsF.Cells(rF, 2).Value = "duplicado"
-        wsF.Cells(rF, 14).Value = "Hash ja importado"
-        Exit Function
-    End If
+    cat = Trim(CStr(wsF.Cells(rF, 3).Value)): desp = Trim(CStr(wsF.Cells(rF, 4).Value))
     rD = AcharLinhaDespesa(desp, cat)
-    If rD = 0 Then
-        wsF.Cells(rF, 2).Value = "erro"
-        wsF.Cells(rF, 14).Value = "Despesa nao localizada"
+    If rD = 0 Then Err.Raise vbObjectError + 1201, , "Despesa nao localizada."
+    cadastro = ModuloIntegridade.LinhaPorId(wsR, 6, wsD.Cells(rD, 24).Value, 13)
+    If cadastro = 0 Then Err.Raise vbObjectError + 1202, , "Cadastro sem identificador."
+    If NormalizarSimNao(CStr(wsR.Cells(cadastro, 5).Value)) <> "Sim" Then Err.Raise vbObjectError + 1203, , "Despesa inativa."
+    periodicidade = Trim(CStr(wsF.Cells(rF, 13).Value))
+    If periodicidade = "" Then periodicidade = CStr(wsR.Cells(cadastro, 4).Value)
+    mes = ModuloIntegridade.Competencia(wsF.Cells(rF, 6).Value)
+    colMes = ModuloIntegridade.ColunaPeriodo(mes, periodicidade)
+    If Not TryParseDouble(CStr(wsF.Cells(rF, 7).Value), valor) Then Err.Raise vbObjectError + 1204, , "Valor invalido."
+    If valor <= 0 Or Abs(valor - WorksheetFunction.Round(valor, 2)) > 0.000001 Then Err.Raise vbObjectError + 1205, , "Informe valor positivo com ate duas casas decimais."
+    hash = Trim(CStr(wsF.Cells(rF, 12).Value))
+    arquivo = Trim(CStr(wsF.Cells(rF, 11).Value))
+    If hash = "" Or arquivo = "" Then Err.Raise vbObjectError + 1206, , "Arquivo e hash obrigatorios."
+    If Dir(ResolverCaminhoArquivo(arquivo)) = "" Then Err.Raise vbObjectError + 1212, , "Comprovante nao encontrado. Restaure o arquivo antes de importar."
+    If HashJaImportado(wsC, hash) Then
+        wsF.Cells(rF, 2).Value = "duplicado"
+        wsF.Cells(rF, 14).Value = "Arquivo ja lancado. Nenhum valor subtraido."
         Exit Function
     End If
-
-    If UCase$(periodicidade) = "MENSAL" And mes = "" Then
-        wsF.Cells(rF, 2).Value = "erro"
-        wsF.Cells(rF, 14).Value = "Mes vazio"
-        Exit Function
-    End If
-
     rC = ProximaLinhaControle(wsC)
-    wsC.Cells(rC, 1).Value = rC - 3
+    registro = wsC.Range(wsC.Cells(rC, 1), wsC.Cells(rC, 13)).Formula
+    saldo = wsD.Cells(rD, colMes).Value
+    numero = ModuloIntegridade.NovoControle()
+    gravando = True
+    wsC.Cells(rC, 1).Value = numero
     wsC.Cells(rC, 2).Value = cat
-    wsC.Cells(rC, 3).Value = recebedor
-    wsC.Cells(rC, 4).Value = mes
+    wsC.Cells(rC, 3).Value = wsF.Cells(rF, 9).Value
+    wsC.Cells(rC, 4).NumberFormat = "@": wsC.Cells(rC, 4).Value = mes
     wsC.Cells(rC, 5).Value = valor
-    wsC.Cells(rC, 6).Value = "Anexado"
-    wsC.Cells(rC, 7).Value = arquivo
-    If arquivo <> "" Then wsC.Hyperlinks.Add Anchor:=wsC.Cells(rC, 7), Address:=ResolverCaminhoArquivo(arquivo), TextToDisplay:=arquivo
-    wsC.Cells(rC, 8).Value = tipo & " - " & dt & " - pagador: " & pagador
-    wsC.Cells(rC, COL_HASH_CONTROLE).Value = hash
-
-    If UCase$(periodicidade) = "MENSAL" Then
-        colMes = AcharOuCriarColunaMes(mes)
-        wsD.Cells(rD, colMes).Value = NzD(wsD.Cells(rD, colMes).Value) + valor
-    Else
-        wsD.Cells(rD, COL_EVENTUAL_ANUAL).Value = NzD(wsD.Cells(rD, COL_EVENTUAL_ANUAL).Value) + valor
-    End If
-
-    wsD.Cells(rD, COL_COMPROVANTE).Value = "Anexado"
-    AtualizarObservacaoComLink wsD, rD, rC - 3, arquivo
-    wsD.Rows(rD).Hidden = False
+    wsC.Cells(rC, 6).Value = "Anexado": wsC.Cells(rC, 7).Value = arquivo
+    wsC.Cells(rC, 8).Value = CStr(wsF.Cells(rF, 10).Value) & " - " & CStr(wsF.Cells(rF, 5).Value) & " - pagador: " & CStr(wsF.Cells(rF, 8).Value)
+    wsC.Cells(rC, 9).Value = hash
+    wsC.Cells(rC, 10).Value = wsD.Cells(rD, 24).Value
+    wsC.Cells(rC, 11).Value = periodicidade: wsC.Cells(rC, 12).Value = "OK"
+    wsD.Cells(rD, colMes).Value = WorksheetFunction.Round(NzD(saldo) + valor, 2)
+    wsC.Hyperlinks.Add Anchor:=wsC.Cells(rC, 7), Address:=ResolverCaminhoArquivo(arquivo), TextToDisplay:=arquivo
+    AtualizarCalculos
+    ModuloIntegridade.AtualizarReferencias
     wsF.Cells(rF, 2).Value = "importado"
-    wsF.Cells(rF, 14).Value = "Controle nº " & (rC - 3)
+    wsF.Cells(rF, 14).Value = "Controle " & numero
     ImportarLinhaFila = True
     Exit Function
 FalhaLinha:
+    mensagem = Err.Description
+    If gravando Then
+        wsD.Cells(rD, colMes).Value = saldo
+        wsC.Cells(rC, 7).Hyperlinks.Delete
+        wsC.Range(wsC.Cells(rC, 1), wsC.Cells(rC, 13)).Formula = registro
+    End If
     wsF.Cells(rF, 2).Value = "erro"
-    wsF.Cells(rF, 14).Value = Err.Description
-    ImportarLinhaFila = False
+    wsF.Cells(rF, 14).Value = mensagem
 End Function
 
 Public Sub ImportarComprovantesCsv()
-    Dim caminhoCsv As String, linha As String, campos As Variant
-    Dim f As Integer, linhaCsv As Long
-    Dim wsC As Worksheet, wsD As Worksheet
-    Dim rC As Long, rD As Long, colMes As Long
-    Dim cat As String, desp As String, dt As String, mes As String
-    Dim valor As Double, pagador As String, recebedor As String, tipo As String
-    Dim arquivo As String, hash As String, periodicidade As String
-    Dim importados As Long, duplicados As Long, ignorados As Long, erros As String
-
-    caminhoCsv = CaminhoBase() & Application.PathSeparator & "comprovantes.csv"
-    If Dir(caminhoCsv) = "" Then
-        Aviso "CSV nao encontrado:" & vbLf & caminhoCsv, vbExclamation
-        Exit Sub
-    End If
-
-    Set wsC = ThisWorkbook.Worksheets("Controle")
-    Set wsD = ThisWorkbook.Worksheets("Despesas")
-    DesprotegerPlanilhas
-    GarantirCabecalhoControle wsC
-    AtualizarFormulasDespesas wsD
-    AtualizarResumoRateio
-
-    Application.ScreenUpdating = False
-    Application.EnableEvents = False
-
+    Dim caminho As String, f As Integer, linha As String, campos As Variant, ws As Worksheet, r As Long, n As Long
+    On Error GoTo Falha
+    caminho = CaminhoBase() & Application.PathSeparator & "comprovantes.csv"
+    Set ws = GarantirAbaFila()
     f = FreeFile
-    Open caminhoCsv For Input As #f
+    Open caminho For Input As #f
     If Not EOF(f) Then Line Input #f, linha
-    linhaCsv = 1
-
     Do While Not EOF(f)
         Line Input #f, linha
-        linhaCsv = linhaCsv + 1
         If Trim(linha) <> "" Then
             campos = ParseCsvSemicolon(linha)
-            If UBound(campos) < 11 Then
-                ignorados = ignorados + 1
-                erros = erros & "Linha " & linhaCsv & ": colunas insuficientes." & vbLf
-                GoTo ProximaLinha
-            End If
-
-            cat = Trim(CStr(campos(1)))
-            desp = Trim(CStr(campos(2)))
-            dt = Trim(CStr(campos(3)))
-            mes = Trim(CStr(campos(4)))
-            pagador = Trim(CStr(campos(6)))
-            recebedor = Trim(CStr(campos(7)))
-            tipo = Trim(CStr(campos(8)))
-            arquivo = Trim(CStr(campos(9)))
-            hash = Trim(CStr(campos(10)))
-            periodicidade = Trim(CStr(campos(11)))
-            If periodicidade = "" Then periodicidade = "Mensal"
-
-            If Not TryParseDouble(CStr(campos(5)), valor) Then
-                ignorados = ignorados + 1
-                erros = erros & "Linha " & linhaCsv & ": valor invalido." & vbLf
-                GoTo ProximaLinha
-            End If
-
-            If hash <> "" And HashJaImportado(wsC, hash) Then
-                duplicados = duplicados + 1
-                GoTo ProximaLinha
-            End If
-
-            rD = AcharLinhaDespesa(desp, cat)
-            If rD = 0 Then
-                ignorados = ignorados + 1
-                erros = erros & "Linha " & linhaCsv & ": despesa nao localizada: " & desp & vbLf
-                GoTo ProximaLinha
-            End If
-
-            rC = ProximaLinhaControle(wsC)
-            wsC.Cells(rC, 1).Value = rC - 3
-            wsC.Cells(rC, 2).Value = cat
-            wsC.Cells(rC, 3).Value = recebedor
-            wsC.Cells(rC, 4).Value = mes
-            wsC.Cells(rC, 5).Value = valor
-            wsC.Cells(rC, 6).Value = "Anexado"
-            wsC.Cells(rC, 7).Value = arquivo
-            If arquivo <> "" Then
-                wsC.Hyperlinks.Add Anchor:=wsC.Cells(rC, 7), Address:=ResolverCaminhoArquivo(arquivo), TextToDisplay:=arquivo
-            End If
-            wsC.Cells(rC, 8).Value = tipo & " - " & dt & " - pagador: " & pagador
-            wsC.Cells(rC, COL_HASH_CONTROLE).Value = hash
-
-            If UCase$(periodicidade) = "MENSAL" Then
-                colMes = AcharOuCriarColunaMes(mes)
-                wsD.Cells(rD, colMes).Value = NzD(wsD.Cells(rD, colMes).Value) + valor
-            Else
-                wsD.Cells(rD, COL_EVENTUAL_ANUAL).Value = NzD(wsD.Cells(rD, COL_EVENTUAL_ANUAL).Value) + valor
-            End If
-            wsD.Cells(rD, COL_COMPROVANTE).Value = "Anexado"
-            AtualizarObservacaoComLink wsD, rD, rC - 3, arquivo
-    wsD.Rows(rD).Hidden = False
-            importados = importados + 1
+            If UBound(campos) < 11 Then Err.Raise vbObjectError + 1210, , "CSV com colunas insuficientes."
+            r = Application.Max(2, ws.Cells(ws.Rows.Count, 1).End(xlUp).Row + 1)
+            ws.Cells(r, 1).Value = r - 1: ws.Cells(r, 2).Value = "pendente"
+            ws.Cells(r, 3).Value = campos(1): ws.Cells(r, 4).Value = campos(2)
+            ws.Cells(r, 5).Value = campos(3): ws.Cells(r, 6).Value = campos(4)
+            ws.Cells(r, 7).Value = campos(5): ws.Cells(r, 8).Value = campos(6)
+            ws.Cells(r, 9).Value = campos(7): ws.Cells(r, 10).Value = campos(8)
+            ws.Cells(r, 11).Value = campos(9): ws.Cells(r, 12).Value = campos(10)
+            ws.Cells(r, 13).Value = campos(11)
+            If ImportarLinhaFila(ws, r) Then n = n + 1
         End If
-ProximaLinha:
     Loop
     Close #f
-
-    AtualizarFormulasDespesas wsD
-    AtualizarResumoRateio
-    AplicarFormatacaoPadrao
-    Application.EnableEvents = True
-    Application.ScreenUpdating = True
-    ProtegerPlanilhas
-
-    Aviso "Importacao concluida." & vbLf & _
-           "Importados: " & importados & vbLf & _
-           "Duplicados ignorados: " & duplicados & vbLf & _
-           "Linhas ignoradas: " & ignorados & IIf(erros <> "", vbLf & vbLf & erros, ""), vbInformation
+    Aviso "Importados: " & n & ". Confira erros e duplicados na Fila.", vbInformation
+    Exit Sub
+Falha:
+    Dim msg As String
+    msg = Err.Description
+    On Error Resume Next
+    If f > 0 Then Close #f
+    Aviso msg, vbExclamation
 End Sub
 
 Public Sub AbrirRegistrosDaObservacao(cel As Range)
@@ -506,68 +441,12 @@ Public Sub LimparFiltroControle()
     End With
 End Sub
 Public Sub ExcluirRegistroControleSelecionado()
-    Dim wsC As Worksheet, wsD As Worksheet, linhaControle As Long, numeroControle As Long
-    Dim valor As Double, mes As String, linhaDespesa As Long, hash As String, arquivo As String
-    Set wsC = ThisWorkbook.Worksheets("Controle")
-    Set wsD = ThisWorkbook.Worksheets("Despesas")
-
-    If ActiveSheet.Name <> "Controle" Or ActiveCell.Row < LINHA_INICIAL_CONTROLE Then
-        wsC.Activate
-        Aviso "Selecione na aba Controle a linha do comprovante que deseja excluir.", vbExclamation
-        Exit Sub
-    End If
-
-    linhaControle = ActiveCell.Row
-    If NormalizarTexto(CStr(wsC.Cells(linhaControle, 1).Value)) = "total filtrado" Or Trim(CStr(wsC.Cells(linhaControle, 1).Value)) = "" Then
-        Aviso "Selecione uma linha de registro do Controle, nao a linha de total.", vbExclamation
-        Exit Sub
-    End If
-
-    numeroControle = CLng(Val(wsC.Cells(linhaControle, 1).Value))
-    valor = NzD(wsC.Cells(linhaControle, 5).Value)
-    mes = Trim(CStr(wsC.Cells(linhaControle, 4).Value))
-    arquivo = Trim(CStr(wsC.Cells(linhaControle, 7).Value))
-    hash = Trim(CStr(wsC.Cells(linhaControle, COL_HASH_CONTROLE).Value))
-    If numeroControle <= 0 Then
-        Aviso "Numero de controle invalido para exclusao.", vbExclamation
-        Exit Sub
-    End If
-
-    If Application.Visible Then
-        If MsgBox("Excluir definitivamente o Controle nº " & numeroControle & " e remover seu valor/link da aba Despesas?", vbQuestion + vbYesNo, "Excluir registro") <> vbYes Then Exit Sub
-    End If
-
     On Error GoTo Falha
     DesprotegerPlanilhas
-    Application.ScreenUpdating = False
-    Application.EnableEvents = False
-    If wsC.AutoFilterMode Then wsC.AutoFilterMode = False
-    LimparTotalControle wsC
-
-    linhaDespesa = AcharLinhaDespesaPorControle(numeroControle)
-    If linhaDespesa > 0 Then
-        RemoverValorDespesa wsD, linhaDespesa, mes, valor
-        RemoverControleDaObservacao wsD, linhaDespesa, numeroControle
-    End If
-
-    wsC.Rows(linhaControle).Delete Shift:=xlUp
-    RemoverDaFilaPorHashOuArquivo hash, arquivo
-    GarantirCabecalhoControle wsC
-    AtualizarTotalControle wsC
-    AtualizarFormulasDespesas wsD
-    AtualizarResumoRateio
-    AplicarFormatacaoPadrao
-
-    Application.EnableEvents = True
-    Application.ScreenUpdating = True
-    DesprotegerPlanilhas
-    Aviso "Registro excluido. Valor e link removidos da aba Despesas.", vbInformation
+    ModuloIntegridade.ExcluirControle
     Exit Sub
-
 Falha:
-    Application.EnableEvents = True
-    Application.ScreenUpdating = True
-    Aviso "Erro ao excluir registro: " & Err.Description, vbCritical
+    Aviso Err.Description, vbExclamation
 End Sub
 
 Private Sub RemoverDaFilaPorHashOuArquivo(hash As String, arquivo As String)
@@ -652,51 +531,66 @@ Private Function ObservacaoSemNumero(valorAtual As Variant, numeroRemover As Lon
             End If
         End If
     Next i
-    If s <> "" Then ObservacaoSemNumero = "Controle nº " & s
+    If s <> "" Then ObservacaoSemNumero = "Controle nÂº " & s
 End Function
 
 Public Sub LimparDados()
-    NormalizarJanela
-    Dim wsC As Worksheet, wsD As Worksheet
-    Dim sobra As Long, r As Long, c As Long, ultimaControle As Long
+    Dim wsC As Worksheet, wsD As Worksheet, wsF As Worksheet, wsE As Worksheet
+    Dim ultimaControle As Long, c As Long, dadosControle As Range
+    Dim eventos As Boolean, tela As Boolean, mensagem As String
+    If Application.Visible Then
+        If MsgBox("Limpar os lancamentos, valores e vinculos desta planilha?" & vbLf & _
+                  "Cadastros, configuracoes e arquivos de comprovantes serao preservados.", _
+                  vbYesNo + vbQuestion + vbDefaultButton2, "Limpar dados") <> vbYes Then Exit Sub
+    End If
+    eventos = Application.EnableEvents: tela = Application.ScreenUpdating
+    On Error GoTo Falha
+    Application.EnableEvents = False: Application.ScreenUpdating = False
     Set wsC = ThisWorkbook.Worksheets("Controle")
     Set wsD = ThisWorkbook.Worksheets("Despesas")
-
+    Set wsF = ThisWorkbook.Worksheets("Fila")
+    Set wsE = ThisWorkbook.Worksheets(NOME_ABA_FORM)
     DesprotegerPlanilhas
-    DesprotegerAbaSegura wsC
-    DesprotegerAbaSegura wsD
-    If wsC.ProtectContents Or wsD.ProtectContents Then
-        Aviso "Nao foi possivel destravar Controle/Despesas para limpar. Use Destravar edicao e tente novamente.", vbCritical
-        Exit Sub
+    If wsC.ProtectContents Or wsD.ProtectContents Or wsF.ProtectContents Or wsE.ProtectContents Then
+        Err.Raise vbObjectError + 1211, , "Nao foi possivel destravar as abas. Nenhuma limpeza iniciada."
     End If
-
-    wsC.Hyperlinks.Delete
-    ultimaControle = UltimaLinhaControle(wsC)
-    If ultimaControle < 2000 Then ultimaControle = 2000
-    For r = LINHA_INICIAL_CONTROLE To 2000
-        For c = 1 To COL_HASH_CONTROLE
-            wsC.Cells(r, c).ClearContents
-        Next c
-    Next r
+    If wsC.AutoFilterMode Then wsC.AutoFilterMode = False
+    ' Preserve the high-water marks before removing the old records.
+    ModuloIntegridade.SincronizarSequencias
+    ultimaControle = LINHA_INICIAL_CONTROLE
+    For c = 1 To 13
+        ultimaControle = Application.Max(ultimaControle, wsC.Cells(wsC.Rows.Count, c).End(xlUp).Row)
+    Next c
+    Set dadosControle = wsC.Range(wsC.Cells(LINHA_INICIAL_CONTROLE, 1), wsC.Cells(ultimaControle, 13))
+    dadosControle.Hyperlinks.Delete
+    dadosControle.ClearContents
+    dadosControle.ClearComments
+    dadosControle.EntireRow.Hidden = False
+    With wsD
+        .Range(.Cells(LINHA_INICIAL_DADOS, COL_MES_INICIAL), .Cells(LINHA_FINAL_DADOS, COL_EVENTUAL_ANUAL)).ClearContents
+        With .Range(.Cells(LINHA_INICIAL_DADOS, COL_COMPROVANTE), .Cells(LINHA_FINAL_DADOS, 23))
+            .Hyperlinks.Delete
+            .ClearContents
+            .ClearComments
+        End With
+    End With
+    ' The queue will be rebuilt from the JSON, including previously imported files.
+    LimparFila wsF
+    EscreverCabecalhoFila wsF
+    wsE.Range("B5:B7").ClearContents
+    LimparFormularioEdicao wsE
     GarantirCabecalhoControle wsC
-    ResetarStatusFila
-    wsD.Range(wsD.Cells(LINHA_INICIAL_DADOS, COL_MES_INICIAL), wsD.Cells(LINHA_FINAL_DADOS, COL_MES_FINAL)).ClearContents
-    wsD.Range(wsD.Cells(LINHA_INICIAL_DADOS, COL_EVENTUAL_ANUAL), wsD.Cells(LINHA_FINAL_DADOS, COL_EVENTUAL_ANUAL)).ClearContents
-    wsD.Range(wsD.Cells(LINHA_INICIAL_DADOS, COL_COMPROVANTE), wsD.Cells(LINHA_FINAL_DADOS, COL_OBSERVACOES)).ClearContents
-    AtualizarFormulasDespesas wsD
-    AtualizarResumoRateio
-    AplicarFormatacaoPadrao
-
-    For r = LINHA_INICIAL_CONTROLE To LINHA_INICIAL_CONTROLE + 300
-        If Trim(CStr(wsC.Cells(r, 1).Value)) <> "" Or Trim(CStr(wsC.Cells(r, COL_HASH_CONTROLE).Value)) <> "" Then sobra = sobra + 1
-    Next r
+    AtualizarCalculos
     ProtegerPlanilhas
+    Application.EnableEvents = eventos: Application.ScreenUpdating = tela
     NormalizarTelaImport
-    If sobra > 0 Then
-        Aviso "Limpeza incompleta no Controle: ainda restaram " & sobra & " linha(s).", vbCritical
-    Else
-        Aviso "Dados limpos.", vbInformation
-    End If
+    AjustarMargensTabelas
+    Aviso "Lancamentos limpos. Gere a extracao e carregue a fila JSON para importar novamente.", vbInformation
+    Exit Sub
+Falha:
+    mensagem = Err.Description
+    Application.EnableEvents = eventos: Application.ScreenUpdating = tela
+    Aviso "A limpeza nao foi concluida: " & mensagem, vbCritical
 End Sub
 Public Sub AbrirFormularioEdicao()
     NormalizarJanela
@@ -741,13 +635,7 @@ Public Sub CarregarRegistroEdicao()
         wsE.Range("D17").Value = wsO.Cells(linha, 11).Value
         If AcharLinhaDespesa(CStr(wsO.Cells(linha, 4).Value)) > 0 Then wsE.Range("D18").Value = ThisWorkbook.Worksheets("Despesas").Cells(AcharLinhaDespesa(CStr(wsO.Cells(linha, 4).Value)), COL_COTA_PARTE).Value
     ElseIf origem = "Controle" Then
-        Set wsO = ThisWorkbook.Worksheets("Controle")
-        wsE.Range("D8").Value = wsO.Cells(linha, 2).Value
-        wsE.Range("D9").Value = wsO.Cells(linha, 3).Value
-        wsE.Range("D11").Value = wsO.Cells(linha, 4).Value
-        wsE.Range("D12").Value = wsO.Cells(linha, 5).Value
-        wsE.Range("D15").Value = wsO.Cells(linha, 8).Value
-        wsE.Range("D17").Value = wsO.Cells(linha, 7).Value
+        ModuloIntegridade.CarregarControle linha
     Else
         Aviso "Origem deve ser Fila ou Controle.", vbExclamation
     End If
@@ -758,6 +646,7 @@ End Sub
 
 Public Sub SalvarFormularioEdicao()
     Dim wsO As Worksheet, wsE As Worksheet, origem As String, linha As Long, valor As Double
+    On Error GoTo FalhaEdicao
     Set wsE = ThisWorkbook.Worksheets(NOME_ABA_FORM)
     origem = Trim(CStr(wsE.Range("B5").Value))
     linha = CLng(Val(wsE.Range("B6").Value))
@@ -784,27 +673,26 @@ Public Sub SalvarFormularioEdicao()
         wsO.Cells(linha, 11).Value = wsE.Range("D17").Value
         AtualizarCotaParteDespesa CStr(wsE.Range("D9").Value), CStr(wsE.Range("D18").Value)
     ElseIf origem = "Controle" Then
-        Set wsO = ThisWorkbook.Worksheets("Controle")
-        wsO.Cells(linha, 2).Value = wsE.Range("D8").Value
-        wsO.Cells(linha, 3).Value = wsE.Range("D9").Value
-        wsO.Cells(linha, 4).Value = wsE.Range("D11").Value
-        wsO.Cells(linha, 5).Value = valor
-        wsO.Cells(linha, 7).Value = wsE.Range("D17").Value
-        wsO.Cells(linha, 8).Value = wsE.Range("D15").Value
+        ModuloIntegridade.SalvarControle
     Else
         Aviso "Origem deve ser Fila ou Controle.", vbExclamation
     End If
     AplicarFormatacaoPadrao
     ProtegerPlanilhas
     Aviso "Registro atualizado pelo formulario.", vbInformation
+    Exit Sub
+FalhaEdicao:
+    Aviso Err.Description, vbExclamation
 End Sub
 
 Private Sub AbrirFormularioControle(numeroControle As Long)
-    If numeroControle <= 0 Then Exit Sub
+    Dim linha As Long
+    linha = ModuloIntegridade.LinhaPorId(ThisWorkbook.Worksheets("Controle"), 1, numeroControle, 4)
+    If linha = 0 Then Exit Sub
     GarantirFormularioEdicao
     With ThisWorkbook.Worksheets(NOME_ABA_FORM)
         .Range("B5").Value = "Controle"
-        .Range("B6").Value = numeroControle + 3
+        .Range("B6").Value = linha
     End With
     CarregarRegistroEdicao
 End Sub
@@ -849,7 +737,7 @@ Public Sub AplicarFormatacaoPadrao()
     On Error Resume Next
     Set ws = ThisWorkbook.Worksheets("Despesas")
     colTotal = ColunaPorCabecalho(ws, "Total")
-    colMedia = ColunaPorCabecalho(ws, "Média mensal")
+    colMedia = ColunaPorCabecalho(ws, "MÃ©dia mensal")
     If colMedia > 0 Then ws.Range(ws.Cells(LINHA_INICIAL_DADOS, COL_MES_INICIAL), ws.Cells(LINHA_TOTAL, COL_VALOR_COTA_PARTE)).NumberFormat = """R$"" #,##0.00" Else ws.Range("C5:N59").NumberFormat = """R$"" #,##0.00"
     ws.Range(ws.Cells(LINHA_INICIAL_DADOS, COL_COTA_PARTE), ws.Cells(LINHA_FINAL_DADOS, COL_COTA_PARTE)).NumberFormat = "General"
     Set ws = ThisWorkbook.Worksheets("Controle")
@@ -951,13 +839,14 @@ Public Sub CongelarReferenciasDespesas()
     With ThisWorkbook.Worksheets("Despesas")
         .Activate
         .ScrollArea = ""
-        .Columns("V:W").Hidden = False
-        .Columns("V").ColumnWidth = 58
-        .Columns("W").ColumnWidth = 28
-        .Range("V5:W123").WrapText = False
-        .Range("V5:W123").ShrinkToFit = False
-        .Range("V5:W123").HorizontalAlignment = xlLeft
-        .Columns("X:XFD").Hidden = True
+        ' Status de comprovante, observacoes de auditoria e IDs sao internos.
+        ' A tela de Despesas deve mostrar somente o planejamento financeiro.
+        .Columns("U").Hidden = True
+        .Columns("V").Hidden = False
+        .Columns("W:X").Hidden = True
+        .Columns("W:XFD").Hidden = True
+        .Columns("Y:AB").Hidden = False
+        .Columns("Y:AB").ColumnWidth = 9
         .Range("C5").Select
     End With
     With ActiveWindow
@@ -1163,13 +1052,44 @@ Private Function JsonValor(objTexto As String, chave As String) As String
 End Function
 
 Private Function JsonUnescape(s As String) As String
-    s = Replace(s, "\" & Chr(34), Chr(34))
-    s = Replace(s, "\\", "\")
-    s = Replace(s, "\/", "/")
-    s = Replace(s, "\n", vbLf)
-    s = Replace(s, "\r", vbCr)
-    s = Replace(s, "\t", vbTab)
-    JsonUnescape = s
+    Dim i As Long, ch As String, resultado As String, codigo As String, n As Long
+    i = 1
+    ' Consume each escape once; a decoded backslash is literal path content.
+    Do While i <= Len(s)
+        ch = Mid$(s, i, 1)
+        If ch = "\" Then
+            i = i + 1
+            If i > Len(s) Then GoTo Invalido
+            ch = Mid$(s, i, 1)
+            Select Case ch
+                Case "\", "/", Chr(34)
+                    resultado = resultado & ch
+                Case "b": resultado = resultado & Chr(8)
+                Case "f": resultado = resultado & Chr(12)
+                Case "n": resultado = resultado & vbLf
+                Case "r": resultado = resultado & vbCr
+                Case "t": resultado = resultado & vbTab
+                Case "u"
+                    codigo = Mid$(s, i + 1, 4)
+                    If Len(codigo) <> 4 Then GoTo Invalido
+                    For n = 1 To 4
+                        If InStr(1, "0123456789abcdef", Mid$(codigo, n, 1), vbTextCompare) = 0 Then GoTo Invalido
+                    Next n
+                    n = CLng("&H" & codigo)
+                    If n > 32767 Then n = n - 65536
+                    resultado = resultado & ChrW(n)
+                    i = i + 4
+                Case Else: GoTo Invalido
+            End Select
+        Else
+            resultado = resultado & ch
+        End If
+        i = i + 1
+    Loop
+    JsonUnescape = resultado
+    Exit Function
+Invalido:
+    Err.Raise vbObjectError + 1210, , "Escape JSON invalido. Nenhum caminho deve ser importado com caracteres corrompidos."
 End Function
 
 Private Function ValorDict(d As Object, chave As String) As String
@@ -1245,8 +1165,8 @@ End Sub
 
 Private Function UltimaLinhaControle(ws As Worksheet) As Long
     Dim r As Long, lastA As Long, lastHash As Long, limite As Long
-    lastA = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-    lastHash = ws.Cells(ws.Rows.Count, COL_HASH_CONTROLE).End(xlUp).Row
+    lastA = ModuloIntegridade.UltimaLinhaPreenchida(ws, 1)
+    lastHash = ModuloIntegridade.UltimaLinhaPreenchida(ws, COL_HASH_CONTROLE)
     limite = lastA
     If lastHash > limite Then limite = lastHash
     If limite < LINHA_INICIAL_CONTROLE Then
@@ -1267,8 +1187,8 @@ Private Function UltimaLinhaControle(ws As Worksheet) As Long
 End Function
 Private Function HashJaImportado(ws As Worksheet, hash As String) As Boolean
     Dim r As Long
-    For r = LINHA_INICIAL_CONTROLE To 2000
-        If Trim(CStr(ws.Cells(r, 1).Value)) <> "" And Trim(CStr(ws.Cells(r, COL_HASH_CONTROLE).Value)) = hash Then
+    For r = LINHA_INICIAL_CONTROLE To UltimaLinhaControle(ws)
+        If Trim(CStr(ws.Cells(r, 1).Value)) <> "" And LCase$(Trim(CStr(ws.Cells(r, COL_HASH_CONTROLE).Value))) = LCase$(Trim$(hash)) Then
             HashJaImportado = True
             Exit Function
         End If
@@ -1287,13 +1207,11 @@ Private Function AcharLinhaDespesa(desp As String, Optional categoria As String 
             End If
         Next r
     End With
+    If Trim(categoria) <> "" Then AcharLinhaDespesa = ModuloIntegridade.ResolverAlias(categoria, desp)
 End Function
 
 Private Function AcharOuCriarColunaMes(mes As String) As Long
-    Dim nMes As Long
-    nMes = CLng(Val(Right$(Trim$(mes), 2)))
-    If nMes < 1 Or nMes > 12 Then Err.Raise vbObjectError + 1001, , "Mes invalido: " & mes
-    AcharOuCriarColunaMes = COL_MES_INICIAL + nMes - 1
+    AcharOuCriarColunaMes = ModuloIntegridade.ColunaPeriodo(mes, "Mensal")
 End Function
 
 Private Function LinhaDespesaTemValor(ws As Worksheet, linha As Long) As Boolean
@@ -1307,21 +1225,22 @@ Private Function LinhaDespesaTemValor(ws As Worksheet, linha As Long) As Boolean
 End Function
 
 Public Sub AtualizarVisibilidadeDespesas(Optional ws As Worksheet)
-    Dim r As Long, temCadastro As Boolean
-    On Error Resume Next
+    Dim r As Long, c As Long, temValor As Boolean
     If ws Is Nothing Then Set ws = ThisWorkbook.Worksheets("Despesas")
-    If ws Is Nothing Then Exit Sub
     For r = LINHA_INICIAL_DADOS To LINHA_FINAL_DADOS
-        temCadastro = (Trim(CStr(ws.Cells(r, 1).Value)) <> "" Or Trim(CStr(ws.Cells(r, 2).Value)) <> "")
-        If temCadastro Then
-            ws.Rows(r).Hidden = Not LinhaDespesaTemValor(ws, r)
-        Else
-            ws.Rows(r).Hidden = True
-        End If
+        temValor = False
+        For c = COL_MES_INICIAL To COL_EVENTUAL_ANUAL
+            If IsNumeric(ws.Cells(r, c).Value) Then
+                If Abs(CDbl(ws.Cells(r, c).Value)) > 0.000001 Then
+                    temValor = True
+                    Exit For
+                End If
+            End If
+        Next c
+        ws.Rows(r).Hidden = Not temValor
     Next r
     ws.Rows(LINHA_CABECALHO).Hidden = False
     ws.Rows(LINHA_TOTAL).Hidden = False
-    On Error GoTo 0
 End Sub
 
 Private Sub AtualizarFormulasDespesas(ws As Worksheet)
@@ -1329,8 +1248,8 @@ Private Sub AtualizarFormulasDespesas(ws As Worksheet)
     For r = LINHA_INICIAL_DADOS To LINHA_FINAL_DADOS
         ws.Cells(r, COL_VALOR_MES).Formula = "=IF(OR(A" & r & "<>" & Chr(34) & Chr(34) & ",B" & r & "<>" & Chr(34) & Chr(34) & "),(SUM(" & ws.Range(ws.Cells(r, COL_MES_INICIAL), ws.Cells(r, COL_MES_FINAL)).Address(False, False) & ")+" & ws.Cells(r, COL_EVENTUAL_ANUAL).Address(False, False) & ")/12," & Chr(34) & Chr(34) & ")"
         ws.Cells(r, COL_VALOR_ANUAL).Formula = "=IF(OR(A" & r & "<>" & Chr(34) & Chr(34) & ",B" & r & "<>" & Chr(34) & Chr(34) & "),SUM(" & ws.Range(ws.Cells(r, COL_MES_INICIAL), ws.Cells(r, COL_MES_FINAL)).Address(False, False) & ")+" & ws.Cells(r, COL_EVENTUAL_ANUAL).Address(False, False) & "," & Chr(34) & Chr(34) & ")"
-        ws.Cells(r, COL_VALOR_COTA_PARTE_ANUAL).Formula = "=IF(OR(A" & r & "<>" & Chr(34) & Chr(34) & ",B" & r & "<>" & Chr(34) & Chr(34) & "),IF(" & ws.Cells(r, COL_COTA_PARTE).Address(False, False) & "=" & Chr(34) & "Sim" & Chr(34) & "," & ws.Cells(r, COL_VALOR_ANUAL).Address(False, False) & "/2," & ws.Cells(r, COL_VALOR_ANUAL).Address(False, False) & ")," & Chr(34) & Chr(34) & ")"
-        ws.Cells(r, COL_VALOR_COTA_PARTE).Formula = "=IF(OR(A" & r & "<>" & Chr(34) & Chr(34) & ",B" & r & "<>" & Chr(34) & Chr(34) & "),IF(" & ws.Cells(r, COL_COTA_PARTE).Address(False, False) & "=" & Chr(34) & "Sim" & Chr(34) & "," & ws.Cells(r, COL_VALOR_MES).Address(False, False) & "/2," & ws.Cells(r, COL_VALOR_MES).Address(False, False) & ")," & Chr(34) & Chr(34) & ")"
+        ws.Cells(r, COL_VALOR_COTA_PARTE_ANUAL).Formula = "=IF(OR(A" & r & "<>" & Chr(34) & Chr(34) & ",B" & r & "<>" & Chr(34) & Chr(34) & "),IF(" & ws.Cells(r, COL_COTA_PARTE).Address(False, False) & "=" & Chr(34) & "Sim" & Chr(34) & "," & ws.Cells(r, COL_VALOR_ANUAL).Address(False, False) & "/Config!$B$6," & ws.Cells(r, COL_VALOR_ANUAL).Address(False, False) & ")," & Chr(34) & Chr(34) & ")"
+        ws.Cells(r, COL_VALOR_COTA_PARTE).Formula = "=IF(OR(A" & r & "<>" & Chr(34) & Chr(34) & ",B" & r & "<>" & Chr(34) & Chr(34) & "),IF(" & ws.Cells(r, COL_COTA_PARTE).Address(False, False) & "=" & Chr(34) & "Sim" & Chr(34) & "," & ws.Cells(r, COL_VALOR_MES).Address(False, False) & "/Config!$B$6," & ws.Cells(r, COL_VALOR_MES).Address(False, False) & ")," & Chr(34) & Chr(34) & ")"
         If Trim(CStr(ws.Cells(r, 1).Value)) <> "" Or Trim(CStr(ws.Cells(r, 2).Value)) <> "" Then
             If Trim(CStr(ws.Cells(r, COL_COMPROVANTE).Value)) = "" Then ws.Cells(r, COL_COMPROVANTE).Value = "Pendente"
         Else
@@ -1346,22 +1265,72 @@ Private Sub AtualizarFormulasDespesas(ws As Worksheet)
 End Sub
 
 Private Sub AtualizarResumoRateio()
-    Dim ws As Worksheet, r As Long
-    On Error Resume Next
+    Dim ws As Worksheet, wd As Worksheet, cats As Object, r As Long, saida As Long, categoria As Variant, fim As Long
     Set ws = ThisWorkbook.Worksheets("Resumo e Rateio")
-    If ws Is Nothing Then Exit Sub
-    ws.Cells(3, 1).Value = "Categoria"
-    ws.Cells(3, 2).Value = "Cota parte mes (R$)"
-    ws.Cells(3, 3).Value = "Cota parte anual (R$)"
-    For r = 4 To 13
-        ws.Cells(r, 2).Formula = "=SUMIFS(Despesas!$T:$T,Despesas!$A:$A,A" & r & ")"
-        ws.Cells(r, 3).Formula = "=SUMIFS(Despesas!$S:$S,Despesas!$A:$A,A" & r & ")"
+    Set wd = ThisWorkbook.Worksheets("Despesas")
+    Set cats = CreateObject("Scripting.Dictionary")
+    cats.CompareMode = vbTextCompare
+    For r = LINHA_INICIAL_DADOS To LINHA_FINAL_DADOS
+        categoria = Trim(CStr(wd.Cells(r, 1).Value))
+        If categoria <> "" And Trim(CStr(wd.Cells(r, 2).Value)) <> "" Then
+            If Not cats.Exists(categoria) Then cats.Add categoria, True
+        End If
     Next r
-    ws.Cells(14, 2).Formula = "=SUM(B4:B13)"
-    ws.Cells(14, 3).Formula = "=SUM(C4:C13)"
-    ws.Range("B4:C14").NumberFormat = """R$"" #,##0.00"
-    On Error GoTo 0
+    fim = Application.Max(14, ws.Cells(ws.Rows.Count, 1).End(xlUp).Row)
+    ws.Range("A4:C" & fim).ClearContents
+    saida = 4
+    For Each categoria In cats.Keys
+        ws.Cells(saida, 1).Value = categoria
+        ws.Cells(saida, 2).Formula = "=SUMIF(Despesas!A5:A" & LINHA_FINAL_DADOS & ",A" & saida & ",Despesas!T5:T" & LINHA_FINAL_DADOS & ")"
+        ws.Cells(saida, 3).Formula = "=SUMIF(Despesas!A5:A" & LINHA_FINAL_DADOS & ",A" & saida & ",Despesas!S5:S" & LINHA_FINAL_DADOS & ")"
+        saida = saida + 1
+    Next categoria
+    ws.Cells(saida, 1).Value = "TOTAL GERAL"
+    If saida > 4 Then
+        ws.Cells(saida, 2).Formula = "=SUM(B4:B" & (saida - 1) & ")"
+        ws.Cells(saida, 3).Formula = "=SUM(C4:C" & (saida - 1) & ")"
+    Else
+        ws.Cells(saida, 2).Value = 0: ws.Cells(saida, 3).Value = 0
+    End If
+    ws.Range("F9").Formula = "=$B$" & saida & "*F8"
+    ws.Range("G9").Formula = "=$B$" & saida & "*G8"
+    ws.Range("B4:C" & saida).NumberFormat = """R$"" #,##0.00"
+    AtualizarResumoPeriodo
 End Sub
+
+Private Sub AtualizarResumoPeriodo()
+    Dim ws As Worksheet, cfg As Worksheet, inicio As Date, ultima As Long
+    Dim valores As String, meses As String, ids As String, criterio As String
+    inicio = ModuloIntegridade.InicioPeriodo()
+    Set ws = ThisWorkbook.Worksheets("Resumo e Rateio")
+    Set cfg = ThisWorkbook.Worksheets("Config")
+    cfg.Range("B9").Formula = "=Despesas!C4"
+    cfg.Range("B10").Formula = "=Despesas!N4"
+    ThisWorkbook.Worksheets("Despesas").Range("A2").Value = "Periodo: " & Format$(inicio, "mm/yyyy") & " a " & Format$(DateAdd("m", 11, inicio), "mm/yyyy") & " (12 meses)"
+    ws.Range("A2").Value = "Periodo: " & Format$(inicio, "mm/yyyy") & " a " & Format$(DateAdd("m", 11, inicio), "mm/yyyy")
+    ws.Range("B3").Value = "Cota media mensal (12 meses)"
+    ws.Range("C3").Value = "Cota total do periodo"
+    ultima = Application.Max(4, UltimaLinhaControle(ThisWorkbook.Worksheets("Controle")))
+    valores = "Controle!E4:E" & ultima
+    meses = "Controle!D4:D" & ultima
+    ids = "Controle!A4:A" & ultima
+    ' YEAR/MONTH avoid locale-dependent TEXT date tokens in Portuguese Excel.
+    criterio = meses & ","">=""&YEAR(Config!B9)&""-""&RIGHT(""0""&MONTH(Config!B9),2)," & meses & ",""<=""&YEAR(Config!B10)&""-""&RIGHT(""0""&MONTH(Config!B10),2)," & ids & ","">0"""
+    ws.Range("E12").Value = "Comprovantes"
+    ws.Range("F12").Value = "Qtd."
+    ws.Range("G12").Value = "Valor (R$)"
+    ws.Range("E13").Value = "No periodo"
+    ws.Range("F13").Formula = "=COUNTIFS(" & criterio & ")"
+    ws.Range("G13").Formula = "=SUMIFS(" & valores & "," & criterio & ")"
+    ws.Range("E14").Value = "Fora do periodo"
+    ws.Range("F14").Formula = "=COUNTIF(" & ids & ","">0"")-F13"
+    ws.Range("G14").Formula = "=SUMIF(" & ids & ","">0""," & valores & ")-G13"
+    ws.Range("E15").Value = "Diferenca despesas - comprovantes"
+    ws.Range("G15").Formula = "=SUM(Despesas!Q5:Q" & LINHA_FINAL_DADOS & ")-G13"
+    ws.Range("F13:F14").NumberFormat = "0"
+    ws.Range("G13:G15").NumberFormat = """R$"" #,##0.00"
+End Sub
+
 Private Function ColunaPorCabecalho(ws As Worksheet, prefixo As String) As Long
     Dim c As Long, alvo As String, atual As String
     alvo = NormalizarTexto(prefixo)
@@ -1391,7 +1360,7 @@ Private Function AtualizarObservacao(valorAtual As Variant, numeroControle As Lo
     Dim s As String
     s = Trim(CStr(valorAtual))
     If s = "" Then
-        AtualizarObservacao = "Controle nº " & numeroControle
+        AtualizarObservacao = "Controle nÂº " & numeroControle
     Else
         AtualizarObservacao = s & ", " & numeroControle
     End If
@@ -1454,98 +1423,116 @@ End Sub
 
 Public Sub CarregarCadastroSelecionado()
     Dim ws As Worksheet, r As Long
-    GarantirAbaCadastros
     Set ws = ThisWorkbook.Worksheets(NOME_ABA_CADASTROS)
     If ActiveSheet.Name <> ws.Name Or ActiveCell.Row < 13 Then
-        Aviso "Selecione uma linha da lista de cadastros.", vbExclamation
-        ws.Activate
+        Aviso "Selecione uma linha de cadastro.", vbExclamation
         Exit Sub
     End If
     r = ActiveCell.Row
+    If Trim(CStr(ws.Cells(r, 6).Value)) = "" Then
+        Aviso "Cadastro sem identificador. Confira a migracao.", vbExclamation
+        Exit Sub
+    End If
     ws.Range("C4").Value = ws.Cells(r, 1).Value
     ws.Range("C6").Value = ws.Cells(r, 2).Value
     ws.Range("C8").Value = ws.Cells(r, 3).Value
     ws.Range("E8").Value = ws.Cells(r, 4).Value
     ws.Range("G8").Value = ws.Cells(r, 5).Value
+    ws.Range("I4").Value = ws.Cells(r, 6).Value
 End Sub
 
 Public Sub SalvarCadastroDespesa()
-    Dim ws As Worksheet, cat As String, desp As String, cota As String, periodicidade As String, ativo As String, r As Long
-    GarantirAbaCadastros
+    Dim ws As Worksheet, wd As Worksheet, cat As String, desp As String, cota As String
+    Dim periodicidade As String, ativo As String, id As String, r As Long, d As Long, outro As Long
+    Dim antigo As Variant, antigaDespesa As Variant, antigaCota As Variant, antigoId As Variant
+    Dim gravando As Boolean, mensagem As String
+    On Error GoTo Falha
     Set ws = ThisWorkbook.Worksheets(NOME_ABA_CADASTROS)
-    cat = Trim(CStr(ws.Range("C4").Value))
-    desp = Trim(CStr(ws.Range("C6").Value))
+    Set wd = ThisWorkbook.Worksheets("Despesas")
+    cat = Trim(CStr(ws.Range("C4").Value)): desp = Trim(CStr(ws.Range("C6").Value))
     cota = NormalizarSimNao(CStr(ws.Range("C8").Value))
-    periodicidade = Trim(CStr(ws.Range("E8").Value))
     ativo = NormalizarSimNao(CStr(ws.Range("G8").Value))
-    If ativo = "" Then ativo = "Sim"
-    If periodicidade = "" Then periodicidade = "Mensal"
-    If cat = "" Or desp = "" Then
-        Aviso "Informe categoria e despesa antes de salvar.", vbExclamation
-        Exit Sub
+    periodicidade = Trim(CStr(ws.Range("E8").Value))
+    If cat = "" Or desp = "" Then Err.Raise vbObjectError + 1101, , "Informe categoria e despesa."
+    If cota <> "Sim" And cota <> "Nao" Then Err.Raise vbObjectError + 1102, , "Cota deve ser Sim ou Nao."
+    If ativo <> "Sim" And ativo <> "Nao" Then Err.Raise vbObjectError + 1103, , "Ativo deve ser Sim ou Nao."
+    If periodicidade <> "Mensal" And periodicidade <> "Anual" And periodicidade <> "Eventual" Then Err.Raise vbObjectError + 1104, , "Periodicidade invalida."
+    id = Trim(CStr(ws.Range("I4").Value))
+    outro = AcharLinhaDespesa(desp, cat)
+    If id <> "" Then
+        r = ModuloIntegridade.LinhaPorId(ws, 6, id, 13)
+        d = ModuloIntegridade.LinhaPorId(wd, 24, id, 5)
+        If r = 0 Or d = 0 Then Err.Raise vbObjectError + 1105, , "Cadastro sem vinculo valido."
+        If outro > 0 And outro <> d Then Err.Raise vbObjectError + 1106, , "Nome ja usado por outro cadastro."
+    Else
+        If outro > 0 Or LinhaCadastro(ws, cat, desp) > 0 Then Err.Raise vbObjectError + 1107, , "Cadastro existente. Use Carregar para editar."
+        r = ProximaLinhaCadastro(ws)
+        d = ProximaLinhaDespesaCadastro(wd)
+        id = ModuloIntegridade.NovaDespesa()
     End If
     DesprotegerPlanilhas
-    r = LinhaCadastro(ws, cat, desp)
-    If r = 0 Then r = ProximaLinhaCadastro(ws)
-    ws.Cells(r, 1).Value = cat
-    ws.Cells(r, 2).Value = desp
-    ws.Cells(r, 3).Value = cota
-    ws.Cells(r, 4).Value = periodicidade
-    ws.Cells(r, 5).Value = ativo
-    GarantirDespesaCadastro cat, desp, cota
-    AplicarFormatacaoPadrao
-    DesprotegerPlanilhas
-    Aviso "Cadastro salvo e sincronizado com Despesas.", vbInformation
+    antigo = ws.Range(ws.Cells(r, 1), ws.Cells(r, 6)).Value
+    antigaDespesa = wd.Range(wd.Cells(d, 1), wd.Cells(d, 2)).Value
+    antigaCota = wd.Cells(d, 18).Value: antigoId = wd.Cells(d, 24).Value
+    If CStr(antigoId) <> "" Then
+        If CStr(wd.Cells(d, 1).Value) <> cat Or CStr(wd.Cells(d, 2).Value) <> desp Then
+            ModuloIntegridade.RegistrarAlias CStr(wd.Cells(d, 1).Value), CStr(wd.Cells(d, 2).Value), id
+        End If
+    End If
+    gravando = True
+    ws.Cells(r, 1).Value = cat: ws.Cells(r, 2).Value = desp
+    ws.Cells(r, 3).Value = cota: ws.Cells(r, 4).Value = periodicidade
+    ws.Cells(r, 5).Value = ativo: ws.Cells(r, 6).Value = id
+    wd.Cells(d, 1).Value = cat: wd.Cells(d, 2).Value = desp
+    wd.Cells(d, 18).Value = cota: wd.Cells(d, 24).Value = id
+    ws.Range("I4").Value = id
+    AtualizarCalculos
+    wd.Rows(d).Hidden = False
+    Aviso "Cadastro salvo sem apagar lancamentos existentes.", vbInformation
+    Exit Sub
+Falha:
+    mensagem = Err.Description
+    If gravando Then
+        ws.Range(ws.Cells(r, 1), ws.Cells(r, 6)).Value = antigo
+        wd.Range(wd.Cells(d, 1), wd.Cells(d, 2)).Value = antigaDespesa
+        wd.Cells(d, 18).Value = antigaCota: wd.Cells(d, 24).Value = antigoId
+    End If
+    Aviso mensagem, vbExclamation
 End Sub
 
 Public Sub SincronizarCadastrosDespesas()
-    Dim ws As Worksheet, r As Long, ultima As Long, cat As String, desp As String, cota As String, ativo As String, n As Long
-    GarantirAbaCadastros
+    Dim ws As Worksheet, wd As Worksheet, r As Long, d As Long, id As String, per As String, mensagem As String
+    On Error GoTo Falha
     Set ws = ThisWorkbook.Worksheets(NOME_ABA_CADASTROS)
-    DesprotegerPlanilhas
-    ultima = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-    If ultima < 13 Then ultima = 13
-    For r = 13 To ultima
-        cat = Trim(CStr(ws.Cells(r, 1).Value))
-        desp = Trim(CStr(ws.Cells(r, 2).Value))
-        cota = NormalizarSimNao(CStr(ws.Cells(r, 3).Value))
-        ativo = NormalizarSimNao(CStr(ws.Cells(r, 5).Value))
-        If cat <> "" And desp <> "" And ativo <> "Nao" Then
-            GarantirDespesaCadastro cat, desp, cota
-            n = n + 1
-        End If
+    Set wd = ThisWorkbook.Worksheets("Despesas")
+    For r = 13 To ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+        id = CStr(ws.Cells(r, 6).Value)
+        d = ModuloIntegridade.LinhaPorId(wd, 24, id, 5)
+        If d = 0 Then Err.Raise vbObjectError + 1108, , "Use Novo e Salvar para criar cadastros."
+        If CStr(ws.Cells(r, 1).Value) <> CStr(wd.Cells(d, 1).Value) Or CStr(ws.Cells(r, 2).Value) <> CStr(wd.Cells(d, 2).Value) Then Err.Raise vbObjectError + 1109, , "Use Carregar e Salvar para renomear."
+        id = NormalizarSimNao(CStr(ws.Cells(r, 3).Value))
+        If id <> "Sim" And id <> "Nao" Then Err.Raise vbObjectError + 1110, , "Cota invalida."
+        id = NormalizarSimNao(CStr(ws.Cells(r, 5).Value))
+        If id <> "Sim" And id <> "Nao" Then Err.Raise vbObjectError + 1111, , "Situacao invalida."
+        per = CStr(ws.Cells(r, 4).Value)
+        If per <> "Mensal" And per <> "Anual" And per <> "Eventual" Then Err.Raise vbObjectError + 1112, , "Periodicidade invalida."
     Next r
-    AtualizarCadastroAPartirDespesas ws
-    AtualizarFormulasDespesas ThisWorkbook.Worksheets("Despesas")
-    AtualizarResumoRateio
-    AplicarFormatacaoPadrao
     DesprotegerPlanilhas
-    Aviso "Cadastros sincronizados: " & n & " despesa(s) ativa(s).", vbInformation
+    For r = 13 To ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+        d = ModuloIntegridade.LinhaPorId(wd, 24, ws.Cells(r, 6).Value, 5)
+        wd.Cells(d, 18).Value = NormalizarSimNao(CStr(ws.Cells(r, 3).Value))
+    Next r
+    AtualizarCalculos
+    Aviso "Sincronizado. Periodicidade e situacao preservadas.", vbInformation
+    Exit Sub
+Falha:
+    Aviso Err.Description, vbExclamation
 End Sub
 
 Public Sub AtualizarCadastroAPartirDespesas(Optional wsC As Worksheet)
-    Dim wsD As Worksheet, r As Long, out As Long, cat As String, desp As String
-    If wsC Is Nothing Then
-        GarantirAbaCadastros
-        Set wsC = ThisWorkbook.Worksheets(NOME_ABA_CADASTROS)
-    End If
-    Set wsD = ThisWorkbook.Worksheets("Despesas")
-    For r = 13 To 400
-        wsC.Range(wsC.Cells(r, 1), wsC.Cells(r, 5)).ClearContents
-    Next r
-    out = 13
-    For r = LINHA_INICIAL_DADOS To LINHA_FINAL_DADOS
-        cat = Trim(CStr(wsD.Cells(r, 1).Value))
-        desp = Trim(CStr(wsD.Cells(r, 2).Value))
-        If cat <> "" And desp <> "" Then
-            wsC.Cells(out, 1).Value = cat
-            wsC.Cells(out, 2).Value = desp
-            wsC.Cells(out, 3).Value = NormalizarSimNao(CStr(wsD.Cells(r, COL_COTA_PARTE).Value))
-            wsC.Cells(out, 4).Value = "Mensal"
-            wsC.Cells(out, 5).Value = "Sim"
-            out = out + 1
-        End If
-    Next r
+    ' Never rebuild the registry by deleting its metadata.
+    If wsC Is Nothing Then Set wsC = ThisWorkbook.Worksheets(NOME_ABA_CADASTROS)
+    SincronizarCadastrosDespesas
 End Sub
 
 Private Sub GarantirDespesaCadastro(categoria As String, despesa As String, cota As String)
@@ -1569,20 +1556,13 @@ Private Function ProximaLinhaDespesaCadastro(ws As Worksheet) As Long
             Exit Function
         End If
     Next r
-    Err.Raise vbObjectError + 1100, , "Nao ha linhas livres em Despesas. Aumente a area de cadastro."
+    r = LINHA_FINAL_DADOS + 1
+    ws.Rows(r).Insert Shift:=xlDown
+    ProximaLinhaDespesaCadastro = r
 End Function
 
 Private Sub GarantirCategoriaResumo(categoria As String)
-    Dim ws As Worksheet, r As Long, livre As Long
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets("Resumo e Rateio")
-    On Error GoTo 0
-    If ws Is Nothing Then Exit Sub
-    For r = 4 To 13
-        If NormalizarTexto(CStr(ws.Cells(r, 1).Value)) = NormalizarTexto(categoria) Then Exit Sub
-        If livre = 0 And Trim(CStr(ws.Cells(r, 1).Value)) = "" Then livre = r
-    Next r
-    If livre > 0 Then ws.Cells(livre, 1).Value = categoria
+    AtualizarResumoRateio
 End Sub
 
 Private Function LinhaCadastro(ws As Worksheet, categoria As String, despesa As String) As Long
@@ -1619,15 +1599,15 @@ Private Function NormalizarSimNao(valor As String) As String
         NormalizarSimNao = Trim(valor)
     End If
 End Function
-Private Function NormalizarTexto(s As String) As String
+Private Function NormalizarTexto(ByVal s As String) As String
     s = LCase$(Trim(s))
-    s = Replace(s, "ê", "e")
-    s = Replace(s, "é", "e")
-    s = Replace(s, "è", "e")
-    s = Replace(s, "á", "a")
-    s = Replace(s, "à", "a")
-    s = Replace(s, "ã", "a")
-    s = Replace(s, "ç", "c")
+    s = Replace(s, "Ãª", "e")
+    s = Replace(s, "Ã©", "e")
+    s = Replace(s, "Ã¨", "e")
+    s = Replace(s, "Ã¡", "a")
+    s = Replace(s, "Ã ", "a")
+    s = Replace(s, "Ã£", "a")
+    s = Replace(s, "Ã§", "c")
     NormalizarTexto = s
 End Function
 
@@ -1635,7 +1615,7 @@ Private Function NomeMesPorExtenso(n As String) As String
     Select Case n
         Case "01": NomeMesPorExtenso = "janeiro"
         Case "02": NomeMesPorExtenso = "fevereiro"
-        Case "03": NomeMesPorExtenso = "março"
+        Case "03": NomeMesPorExtenso = "marÃ§o"
         Case "04": NomeMesPorExtenso = "abril"
         Case "05": NomeMesPorExtenso = "maio"
         Case "06": NomeMesPorExtenso = "junho"
@@ -1649,3 +1629,21 @@ Private Function NomeMesPorExtenso(n As String) As String
 End Function
 
 
+
+Public Sub AjustarMargensTabelas()
+    Dim nomes As Variant, margens As Variant, i As Long, ws As Worksheet
+    nomes = Array("Despesas", "Controle", "Resumo e Rateio", "Config", "Import", "Fila", "Editar", "Cadastros")
+    margens = Array("Y:AB", "N:Q", "H:K", "G:J", "L:O", "O:R", "M:P", "J:M")
+    For i = LBound(nomes) To UBound(nomes)
+        Set ws = ThisWorkbook.Worksheets(nomes(i))
+        ws.ScrollArea = ""
+        ws.Columns(margens(i)).Hidden = False
+        ws.Columns(margens(i)).ColumnWidth = 9
+    Next i
+    With ThisWorkbook.Worksheets("Despesas")
+        .Columns("U").Hidden = True
+        .Columns("V").Hidden = False
+        .Columns("V").ColumnWidth = 58
+        .Columns("W:X").Hidden = True
+    End With
+End Sub

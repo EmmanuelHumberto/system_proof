@@ -34,6 +34,8 @@ CONFIG = {
     "Transporte": {"pasta_top": "Transporte-20260907T002744Z-1-001", "sub": "Transporte"},
     "Educação": {"pasta_top": "Educação-20260907T002643Z-1-001", "sub": "Educação"},
     "Vestuário e higiene": {"pasta_top": "Vestuário e higiene -20260907T002759Z-1-001", "sub": "Vestu__rio e higiene"},
+    "Esporte e desenvolvimento": {"pasta_top": "Esporte e desenvolvimento", "sub": "Esporte e desenvolvimento"},
+    "Mesada": {"pasta_top": "Mesada", "sub": "Mesada"},
 }
 
 # Nomes dos meses (formatação de competência)

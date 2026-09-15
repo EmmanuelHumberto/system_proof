@@ -1,0 +1,11 @@
+comprovante 13
+comprovante 23
+comprovante 9
+
+
+Abrir Planilha 
+Aba import - Abrir ferramenta
+Anexar pasta ou arquivo - incluir categoria - Extrair
+Verificar Dados - Editar - Salvar Jason
+Fecar extrator
+Aba Import - fila Jason - Pendentes (Editar erros)
